@@ -1,6 +1,6 @@
-# React + Tailwind + Vite Electrobun Template
+# React + Tailwind + Vite Electrobun 
 
-A fast Electrobun desktop app template with React, Tailwind CSS, and Vite for hot module replacement (HMR).
+A lightweight engineering drawing management system built with Bun, Electrobun, and SQLite. Features real-time CAD synchronization, material code indexing, and precise coordinate-based drawing navigation..
 
 ## Getting Started
 
