@@ -1,11 +1,20 @@
-
 import React, { useEffect, useMemo, useState } from "react";
 import { DataGrid, GridColDef, GridRenderCellParams } from "@mui/x-data-grid";
 import { ThemeProvider, createTheme, Box } from "@mui/material";
 import { useAppTheme } from "@/components/ThemeContext"; // 确保路径正确
-import { getElectroview } from "@/lib/rpc";
 import { Drawing, CADConfig, CadBrand } from "@/lib/types";
-import { FileText, Pencil, Copy, Check, FolderOpen, Zap } from "lucide-react";
+import {
+  FileText,
+  Pencil,
+  Copy,
+  Check,
+  FolderOpen,
+  Zap,
+  Trash2,
+} from "lucide-react";
+import { getElectroView } from "@/lib/rpc";
+import { useConfirm } from "../useConfirm";
+import { on } from "node:cluster";
 
 // --- 内部小组件：分类标签 ---
 // 1. 瘦身后的 Tag 组件
@@ -59,6 +68,8 @@ function CopyButton({ text }: { text: string }) {
 interface DrawingTableProps {
   drawings: Drawing[];
   onEdit: (drawing: Drawing) => void;
+  // 删除
+  onDelete?: (drawing: Drawing) => void;
   cadConfig?: CADConfig;
 }
 
@@ -72,41 +83,44 @@ export function DrawingTable({
   drawings,
   onEdit,
   cadConfig,
+  onDelete,
 }: DrawingTableProps) {
   const { isDark } = useAppTheme(); // 从全局状态获取主题
+  const { confirm, ConfirmDialog } = useConfirm();
 
   // 1. 动态构建 MUI 主题以匹配应用设计
-  const muiTheme = useMemo(
+  const theme = useMemo(
     () =>
       createTheme({
         palette: {
           mode: isDark ? "dark" : "light",
-          primary: { main: "#3b82f6" },
-          background: {
-            paper: isDark ? "#1e293b" : "#ffffff", // slate-800 : white
-            default: isDark ? "#0f172a" : "#f8fafc", // slate-900 : slate-50
-          },
+          primary: { main: "#3b82f6" }, // 建议保留一个基础 HEX
+          // 关键：不要在这里直接引用 var()，改为在下方组件重写中引用
         },
         components: {
-          MuiDataGrid: {
+          MuiTableCell: {
             styleOverrides: {
               root: {
-                border: "none",
-                color: isDark ? "#f1f5f9" : "#1e293b",
-                "& .MuiDataGrid-columnHeader": {
-                  backgroundColor: isDark ? "#1e293b" : "#f8fafc",
-                  borderBottom: `1px solid ${isDark ? "#334155" : "#e2e8f0"}`,
-                },
-                "& .MuiDataGrid-cell": {
-                  borderBottom: `1px solid ${isDark ? "#1e293b" : "#f1f5f9"}`,
-                  display: "flex",
-                  alignItems: "center",
-                },
-                "& .MuiDataGrid-row:hover": {
-                  backgroundColor: isDark
-                    ? "rgba(255, 255, 255, 0.03)"
-                    : "rgba(0, 0, 0, 0.02)",
-                },
+                // 使用细边框，并引用带透明度的变量
+                borderBottom: "1px solid var(--border)",
+                padding: "12px 16px",
+              },
+              head: {
+                // 表头背景稍微加深，增加层级感
+                backgroundColor: "oklch(0.18 0 0 / 0.5)",
+                borderBottom: "2px solid var(--border)", // 表头边框稍微厚一点
+                color: "var(--muted-foreground)",
+              },
+            },
+          },
+          MuiTableContainer: {
+            styleOverrides: {
+              root: {
+                // 给整个表格容器加一个淡淡的圆角边框
+                border: "1px solid var(--border)",
+                borderRadius: "12px",
+                backgroundColor: "var(--card)",
+                overflow: "hidden", // 确保圆角生效
               },
             },
           },
@@ -130,7 +144,7 @@ export function DrawingTable({
   // 2. 业务逻辑处理
   const handleOpenInCAD = (drawing: Drawing) => {
     if (!cadConfig?.path) return alert("请先在设置中配置 CAD 安装路径");
-    getElectroview().rpc!.request.professionalCadNavigate({
+    getElectroView().rpc!.request.professionalCadNavigate({
       brand: cadTypeMap[cadConfig.type] || "AutoCAD",
       cadPath: cadConfig.path,
       materialCode: drawing.materialCode,
@@ -143,13 +157,52 @@ export function DrawingTable({
 
   const handleQuickLocate = (drawing: Drawing) => {
     if (!cadConfig?.path) return alert("请先配置 CAD 路径");
-    getElectroview().rpc!.request.locateInCad({
+    getElectroView().rpc!.request.locateInCad({
       cadType: (cadTypeMap[cadConfig.type] || "AutoCAD") as any,
       dwgPath: drawing.filePath,
       x: drawing.x ?? 0,
       y: drawing.y ?? 0,
       zoomHeight: 500,
     });
+  };
+
+  const handleDeleteRow = async (row: any) => {
+    // 1. 检查会话存储
+    const skipConfirm = sessionStorage.getItem("skipDeleteConfirm") === "true";
+
+    if (skipConfirm) {
+      executeDelete(row); // 直接执行
+      return;
+    }
+
+    // 2. 调用弹窗，传入 true 表示显示勾选框
+    const { confirmed, dontShowAgain } = await confirm(
+      "确认删除",
+      `确定要删除 ${row.materialCode} 吗？`,
+      true,
+    );
+
+    if (confirmed) {
+      if (dontShowAgain) {
+        sessionStorage.setItem("skipDeleteConfirm", "true");
+      }
+      executeDelete(row);
+    }
+  };
+
+  const executeDelete = (row: any) => {
+    console.log("执行删除:", row);
+    // 你的删除 API 逻辑
+    getElectroView()
+      .rpc!.request.delete({ id: row.id })
+      .then(() => {
+        // 这里可以添加删除成功后的反馈，比如刷新列表
+        console.log("删除成功");
+        onDelete && onDelete(row); // 调用父组件传入的删除回调，刷新列表
+      })
+      .catch((err) => {
+        console.error("删除失败:", err);
+      });
   };
 
   // 3. 数据预处理（添加计算属性如分类标签）
@@ -226,16 +279,19 @@ export function DrawingTable({
       width: 200,
       sortable: false,
       renderCell: (p: GridRenderCellParams) => (
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
           <button
             onClick={() => handleOpenInCAD(p.row)}
-            className="flex items-center gap-1 rounded-md bg-blue-500/10 px-2 py-1 text-[11px] font-medium text-blue-400 hover:bg-blue-500/20 transition-all"
+            // 修正：hover:text 改为 hover:bg，并稍微调整内边距和过渡效果
+            className="flex items-center  h-5 gap-1 rounded-md px-2 py-1 text-[11px] cursor-pointer font-medium text-blue-400 hover:bg-blue-500/10 active:scale-95 transition-all"
           >
             <FolderOpen className="h-3 w-3" /> 首次
           </button>
+
           <button
             onClick={() => handleQuickLocate(p.row)}
-            className="flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-1 text-[11px] font-medium text-amber-400 hover:bg-amber-500/20 transition-all"
+            // 修正：hover:text 改为 hover:bg
+            className="flex items-center  h-5 gap-1 rounded-md px-2 py-1 text-[11px] cursor-pointer font-medium text-amber-400 hover:bg-amber-500/10 active:scale-95 transition-all"
           >
             <Zap className="h-3 w-3" /> 定位
           </button>
@@ -243,36 +299,71 @@ export function DrawingTable({
       ),
     },
     {
-    field: "remarks",
-    headerName: "备注",
-    flex: 1,
-    minWidth: 150,
-    maxWidth: 200, // 或者使用 flex: 0.5
-    renderCell: (p) => (
-      <div className="flex items-center w-full h-full">
-        <span 
-          className="truncate text-[11px] text-slate-500 italic opacity-80" 
-          title={p.value || "无备注"}
-        >
-          {p.value || "-"}
-        </span>
-      </div>
-    ),
-  },
+      field: "remarks",
+      headerName: "备注",
+      flex: 1,
+      minWidth: 150,
+      maxWidth: 200, // 或者使用 flex: 0.5
+      renderCell: (p) => (
+        <div className="flex items-center w-full h-full">
+          <span
+            className="truncate text-[11px] text-slate-500 italic opacity-80"
+            title={p.value || "无备注"}
+          >
+            {p.value || "/"}
+          </span>
+        </div>
+      ),
+    },
     {
       field: "manage",
-      headerName: "",
-      width: 60,
+      headerName: "操作",
+      width: 140, // 稍微加宽一点，确保三个按钮不拥挤
       sortable: false,
       align: "right",
-      renderCell: (p) => (
-        <button
-          onClick={() => onEdit(p.row)}
-          className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-500/10 rounded-lg transition-all"
-        >
-          <Pencil className="h-4 w-4" />
-        </button>
-      ),
+      renderCell: (p) => {
+        // 假设你的数据行中有 x, y, z 或者类似的坐标字段
+        // 如果没有，请替换为 p.row.x 等实际字段名
+        const coordinateCmd = `ZOOM C ${p.row.x || 0},${p.row.y || 0} 500 `; // 这里的命令格式需要根据你的 CAD 软件调整，确保它能正确解析坐标并执行定位
+
+        return (
+          <div className="flex items-center justify-end gap-1 h-full">
+            {/* CAD 坐标定位 - 点击复制 Z C x,y,z */}
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(coordinateCmd);
+                // 这里也可以同时调用你之前的 handleQuickLocate
+              }}
+              className="group p-1.5 text-slate-400 hover:text-amber-500 hover:bg-amber-500/10 rounded-lg transition-all active:scale-90"
+              title={`点击复制: ${coordinateCmd}`}
+            >
+              <div className="flex items-center gap-1">
+                <Zap className="h-4 w-4" />
+                {/* 隐藏的成功提示：点击时通过 Tailwind 的 active 状态显示 */}
+                <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-active:opacity-100 bg-slate-800 text-white text-[10px] px-2 py-1 rounded transition-opacity"></span>
+              </div>
+            </button>
+
+            {/* 编辑按钮 */}
+            <button
+              onClick={() => onEdit(p.row)}
+              className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-500/10 rounded-lg transition-all"
+              title="编辑"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+
+            {/* 删除按钮 */}
+            <button
+              onClick={() => handleDeleteRow(p.row)}
+              className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all"
+              title="删除"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        );
+      },
     },
   ];
 
@@ -292,16 +383,14 @@ export function DrawingTable({
   }
 
   return (
-    <ThemeProvider theme={muiTheme}>
+    <ThemeProvider theme={theme}>
       <Box
         sx={{
-          height: "calc(100vh - 220px)", // 自动占满高度
+          height: "calc(100vh - 200px)", // 自动占满高度
           width: "100%",
           bgcolor: "background.paper",
           borderRadius: "16px",
           overflow: "hidden",
-          border: `1px solid ${isDark ? "#334155" : "#e2e8f0"}`,
-          boxShadow: isDark ? "none" : "0 4px 12px -2px rgba(0,0,0,0.05)",
         }}
       >
         <DataGrid
@@ -319,16 +408,33 @@ export function DrawingTable({
             // 1. 设置单元格文字大小
             "& .MuiDataGrid-cell": {
               fontSize: "16px",
+              display: "flex",
+              alignItems: "center",
+              // 如果你希望操作按钮靠右对齐，可以使用以下配置
             },
+            border: "none",
             "& .MuiDataGrid-virtualScroller": {
               backgroundColor: "background.default",
             },
             "& .MuiDataGrid-footerContainer": {
               borderTop: `1px solid ${isDark ? "#334155" : "#e2e8f0"}`,
             },
+            // 1. 去除单元格获得焦点时的蓝色外边框 (这是最核心的)
+            "& .MuiDataGrid-cell:focus": {
+              outline: "none !important",
+            },
+            // 2. 去除单元格在“选中”状态下的外边框
+            "& .MuiDataGrid-cell:focus-within": {
+              outline: "none !important",
+            },
+            // 3. 去除点击行时的蓝色/灰色外轮廓
+            "& .MuiDataGrid-row:focus": {
+              outline: "none !important",
+            },
           }}
         />
       </Box>
+      <ConfirmDialog />
     </ThemeProvider>
   );
 }

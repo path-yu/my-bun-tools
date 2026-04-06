@@ -14,8 +14,8 @@ import {
   DrawingFormData,
   CADConfig,
 } from "@/lib/types";
+import { getElectroView } from "@/lib/rpc";
 
-import { getElectroview } from "@/lib/rpc";
 
 const DEFAULT_CAD_CONFIG: CADConfig = {
   type: "",
@@ -36,7 +36,7 @@ export default function DrawingManagerPage() {
   const [cadConfig, setCadConfig] = useState<CADConfig>(DEFAULT_CAD_CONFIG);
 
   const load = async () => {
-  const electrobun = getElectroview();
+  const electrobun = getElectroView();
     const list = await electrobun.rpc!.request.getAll({});
     console.log("Loaded drawings from Bun:", list, "333");
     setDrawings(list);
@@ -48,7 +48,7 @@ export default function DrawingManagerPage() {
     const prefersDark = window.matchMedia(
       "(prefers-color-scheme: dark)",
     ).matches;
-    getElectroview(); // 初始化Electroview单例
+    getElectroView(); // 初始化Electroview单例
     const shouldBeDark = savedTheme === "dark" || (!savedTheme && prefersDark);
     setIsDarkMode(shouldBeDark);
     if (shouldBeDark) {
@@ -146,9 +146,10 @@ export default function DrawingManagerPage() {
     setDrawings(updatedDrawings);
     setEditingDrawing(null);
     setIsFormOpen(false);
-    getElectroview().rpc!.request.update({
+    getElectroView().rpc!.request.update({
       id: editingDrawing.id,
       ...data,
+      fileName: ""
     });
     console.log(data, "111");
     load(); // 刷新列表以获取最新数据 
@@ -218,6 +219,9 @@ export default function DrawingManagerPage() {
             drawings={filteredDrawings}
             onEdit={handleOpenEdit}
             cadConfig={cadConfig}
+            onDelete={()=>{
+              load();
+            }}
           />
         </div>
       </main>

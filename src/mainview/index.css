@@ -74,6 +74,13 @@
   --sidebar-accent-foreground: oklch(0.98 0 0);
   --sidebar-border: oklch(0.28 0 0);
   --sidebar-ring: oklch(0.65 0.22 255);
+  --card: oklch(0.16 0 0);
+  --background: oklch(0.1 0 0);
+  /* 之前可能是 oklch(0.28 0 0)，现在加入 0.4 的透明度 */
+  --border: oklch(0.3 0 0 / 0.4); 
+  
+  /* 调整单元格悬停色，使其更轻盈 */
+  --action-hover: oklch(1 0 0 / 0.03);
 }
 
 @theme inline {
@@ -153,4 +160,16 @@
 header button {
   -webkit-app-region: no-drag;
    app-region: no-drag;
-} */
+} *//* 强制覆盖 MUI Table 的样式，确保适配 OKLCH */
+.dark .MuiTableCell-root {
+  border-bottom-color: var(--border) !important;
+}
+
+.dark .MuiTableRow-root:nth-of-type(even) {
+  /* 使用透明度来实现 iOS 感的斑马纹 */
+  background-color: oklch(1 0 0 / 0.02); 
+}
+
+.dark .MuiTableRow-root:hover {
+  background-color: oklch(1 0 0 / 0.05) !important;
+}

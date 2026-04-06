@@ -41,6 +41,7 @@ const win = new BrowserWindow({
     x: 200,
     y: 200,
   },
+  
   rpc: drawingRPC,
 });
 console.log('数据库保存路径:',Utils.paths.userData);

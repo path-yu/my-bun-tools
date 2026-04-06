@@ -40,7 +40,8 @@ export const startCadServer = () => {
                 console.error(`[数据库] 插入失败:`, error);
                 return { 
                     status: 'error', 
-                    message: 'Failed to save data to database' 
+                    message: 'Failed to save data to database',
+                    error: error instanceof Error ? error.message : String(error)
                 };
             }
         }, {

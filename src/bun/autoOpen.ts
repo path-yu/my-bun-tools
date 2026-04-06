@@ -65,49 +65,6 @@ export async function professionalCadNavigate(
         console.error(`[启动错误] ${config.brandName} 启动失败: ${err}`);
     }
 }
-
-/**
- * 基于 COM 接口的热跳转方案
- */
-// export async function fixedCadLocate(
-//     brand: CadBrand, 
-//     x: number, 
-//     y: number, 
-//     zoomHeight: number = 500
-// ) {
-//     if (isNaN(x) || isNaN(y)) return console.error("坐标数值无效");
-
-//     const config = CAD_MAP[brand];
-
-//     // 构造 PowerShell 指令
-//     const psCommands = [
-//         `$ErrorActionPreference = 'Stop'`,
-//         `try {`,
-//         // 动态获取对应品牌的 COM 对象
-//         `  $cad = [Runtime.InteropServices.Marshal]::GetActiveObject('${config.progId}')`,
-//         `  $esc = [char]27`,
-//         // 连续发送两个 ESC 确保退出当前正在执行的 CAD 命令
-//         `  $cmd = "$esc$esc._UCS _W ._ZOOM _C ${x},${y} ${zoomHeight} "`,
-//         `  $cad.ActiveDocument.SendCommand($cmd)`,
-//         `  Write-Host 'Success'`,
-//         `} catch {`,
-//         `  exit 1`,
-//         `}`
-//     ].join('; ');
-
-//     const buffer = Buffer.from(psCommands, 'utf16le');
-//     const base64Str = buffer.toString('base64');
-//     const fullCommand = `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${base64Str}`;
-
-//     exec(fullCommand, (error) => {
-//         if (error) {
-//             console.error(`[定位失败]: 请确认 ${config.brandName} 已打开`);
-//             console.log(`当前尝试的 ProgID: ${config.progId}`);
-//         } else {
-//             console.log(`[成功]: 已向运行中的 ${config.brandName} 发送跳转指令 (${x}, ${y})`);
-//         }
-//     });
-// }
 /**
  * 强行定位到具体 DWG 文件的指定坐标
  * @param brand CAD品牌 (AutoCAD, ZWCAD 等)

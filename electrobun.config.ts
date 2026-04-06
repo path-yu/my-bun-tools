@@ -2,7 +2,7 @@ import type { ElectrobunConfig } from "electrobun";
 
 export default {
 	app: {
-		name: "react-tailwind-vite",
+		name: "Tools for drawing management",
 		identifier: "reacttailwindvite.electrobun.dev",
 		version: "0.0.1",
 	},
@@ -22,6 +22,7 @@ export default {
 		},
 		win: {
 			bundleCEF: false,
+			icon: "assets/icon.png",
 		},
 	},
 } satisfies ElectrobunConfig;
