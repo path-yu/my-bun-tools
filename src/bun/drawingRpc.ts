@@ -31,7 +31,7 @@ export type DrawingRPC = {
           y: number;
           zoomHeight?: number;
         };
-        response: void;
+        response: any;
       };
       professionalCadNavigate: {
         params: {
@@ -43,7 +43,7 @@ export type DrawingRPC = {
           y: number;
           zoomHeight?: number;
         };
-        response: void;
+        response:any;
       };
     };
     messages: {};

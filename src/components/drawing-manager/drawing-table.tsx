@@ -15,6 +15,7 @@ import {
 import { getElectroView } from "@/lib/rpc";
 import { useConfirm } from "../useConfirm";
 import { on } from "node:cluster";
+import { useToast } from "../useToast";
 
 // --- 内部小组件：分类标签 ---
 // 1. 瘦身后的 Tag 组件
@@ -87,7 +88,7 @@ export function DrawingTable({
 }: DrawingTableProps) {
   const { isDark } = useAppTheme(); // 从全局状态获取主题
   const { confirm, ConfirmDialog } = useConfirm();
-
+  const { showToast, ToastComponent } = useToast();
   // 1. 动态构建 MUI 主题以匹配应用设计
   const theme = useMemo(
     () =>
@@ -143,27 +144,43 @@ export function DrawingTable({
   }, [isDark]);
   // 2. 业务逻辑处理
   const handleOpenInCAD = (drawing: Drawing) => {
-    if (!cadConfig?.path) return alert("请先在设置中配置 CAD 安装路径");
-    getElectroView().rpc!.request.professionalCadNavigate({
-      brand: cadTypeMap[cadConfig.type] || "AutoCAD",
-      cadPath: cadConfig.path,
-      materialCode: drawing.materialCode,
-      dwgPath: drawing.filePath,
-      x: drawing.x ?? 0,
-      y: drawing.y ?? 0,
-      zoomHeight: 500,
-    });
+    if (!cadConfig?.path)  {
+      return showToast("请先配置 CAD 路径", "error");
+    }
+    getElectroView()
+      .rpc!.request.professionalCadNavigate({
+        brand: cadTypeMap[cadConfig.type] || "AutoCAD",
+        cadPath: cadConfig.path,
+        materialCode: drawing.materialCode,
+        dwgPath: drawing.filePath,
+        x: drawing.x ?? 0,
+        y: drawing.y ?? 0,
+        zoomHeight: 500,
+      })
+      .then((result: any) => {
+        if (result) {
+          showToast(result,"error");
+        }
+      });
   };
 
   const handleQuickLocate = (drawing: Drawing) => {
-    if (!cadConfig?.path) return alert("请先配置 CAD 路径");
-    getElectroView().rpc!.request.locateInCad({
-      cadType: (cadTypeMap[cadConfig.type] || "AutoCAD") as any,
-      dwgPath: drawing.filePath,
-      x: drawing.x ?? 0,
-      y: drawing.y ?? 0,
-      zoomHeight: 500,
-    });
+    if (!cadConfig?.path)  {
+      return showToast("请先配置 CAD 路径", "error");
+    }
+    getElectroView()
+      .rpc!.request.locateInCad({
+        cadType: (cadTypeMap[cadConfig.type] || "AutoCAD") as any,
+        dwgPath: drawing.filePath,
+        x: drawing.x ?? 0,
+        y: drawing.y ?? 0,
+        zoomHeight: 500,
+      })
+      .then((result: any) => {
+        if (result) {
+          showToast(result,"error");
+        }
+      });
   };
 
   const handleDeleteRow = async (row: any) => {
@@ -198,10 +215,12 @@ export function DrawingTable({
       .then(() => {
         // 这里可以添加删除成功后的反馈，比如刷新列表
         console.log("删除成功");
+        showToast("删除成功", "success");
         onDelete && onDelete(row); // 调用父组件传入的删除回调，刷新列表
       })
       .catch((err) => {
         console.error("删除失败:", err);
+        showToast("删除失败", "error");
       });
   };
 
@@ -307,7 +326,7 @@ export function DrawingTable({
       renderCell: (p) => (
         <div className="flex items-center w-full h-full">
           <span
-            className="truncate text-[11px] text-slate-500 italic opacity-80"
+            className="truncate text-[15px] text-slate-500 italic opacity-80"
             title={p.value || "无备注"}
           >
             {p.value || "/"}
@@ -435,6 +454,7 @@ export function DrawingTable({
         />
       </Box>
       <ConfirmDialog />
+      <ToastComponent />
     </ThemeProvider>
   );
 }

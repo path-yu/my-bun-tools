@@ -1,69 +1,94 @@
-import { exec, spawn } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as iconv from 'iconv-lite';
+import { exec, spawn } from "child_process";
+import * as fs from "fs";
+import * as path from "path";
+import * as iconv from "iconv-lite";
 // 建议 1: 改为相对路径
-import { CAD_MAP, type CadBrand } from '../lib/types';
+import { CAD_MAP, type CadBrand } from "../lib/types";
 
 /**
  * 工业级多 CAD 启动导航方案
  */
 export async function professionalCadNavigate(
-    brand: CadBrand,      // 传入品牌
-    cadPath: string,      // 传入用户设置中的 exe 路径
-    materialCode: string, 
-    dwgPath: string, 
-    x: number, 
-    y: number, 
-    zoomHeight: number = 500
+  brand: CadBrand,
+  cadPath: string,
+  materialCode: string,
+  dwgPath: string,
+  x: number,
+  y: number,
+  zoomHeight: number = 500,
 ) {
-    const config = CAD_MAP[brand];
-    const scriptDir = path.join(process.cwd(), "cad_scripts");
-    if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir, { recursive: true });
-    // 文件名逻辑保持唯一
-    const lispPath = path.join(scriptDir, `logic_${materialCode}.lsp`).replace(/\\/g, '/');
-    const scrPath = path.join(scriptDir, `boot_${materialCode}.scr`).replace(/\\/g, '/');
+  const config = CAD_MAP[brand];
+  const scriptDir = path.join(process.cwd(), "cad_scripts");
+  if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir, { recursive: true });
 
-    // 1. 生成 Lisp 定位脚本
-    const lispContent = [
-        '(vl-load-com)',
-        '(defun c:smart_zoom ()',
-        '  (setvar "CMDECHO" 0)',
-        '  (command "_.DELAY" 3000)', // 缩短延时，3秒通常足够
-        '  (command "._UCS" "_W")',
-        `  (command "._ZOOM" "_C" (list ${x} ${y} 0) "${zoomHeight}")`,
-        '  (princ)',
-        ')',
-        '(c:smart_zoom)'
-    ].join('\r\n');
+  // 【关键修改】Lisp 路径必须使用正斜杠，否则 UNC 路径会因转义失败
+  // 例如 \\SJWL\图纸.dwg -> //SJWL/图纸.dwg
+  const safeLispPath = path
+    .join(scriptDir, `logic_${materialCode}.lsp`)
+    .replace(/\\/g, "/");
+  const safeScrPath = path
+    .join(scriptDir, `boot_${materialCode}.scr`)
+    .replace(/\\/g, "/");
+  const safeDwgPath = dwgPath.replace(/\\/g, "/");
+  // --- 新增：文件存在性预检 ---
+  if (!fs.existsSync(safeDwgPath)) {
+    console.error(
+      `[启动取消]: 找不到图纸文件，请检查路径是否正确: ${safeDwgPath}`,
+    );
+    // 这里可以弹出你之前的 MUI 提示或通知
+    return  `[启动取消]: 找不到图纸文件，请检查路径是否正确: ${safeDwgPath}`
+  }
+  const lispContent = [
+    "(vl-load-com)",
+    "(defun c:smart_zoom ()",
+    '  (setvar "CMDECHO" 0)',
+    '  (command "_.DELAY" 3000)',
+    '  (command "._UCS" "_W")',
+    // 使用 rtos 确保 zoomHeight 转换为字符串，避免坐标列表中出现类型错误
+    `  (command "._ZOOM" "_C" (list ${x} ${y} 0) (rtos ${zoomHeight} 2 2))`,
+    "  (princ)",
+    ")",
+    "(c:smart_zoom)",
+  ].join("\r\n");
 
-    try {
-        fs.writeFileSync(lispPath, iconv.encode(lispContent, 'gbk'));
-        fs.writeFileSync(scrPath, iconv.encode(`(load "${lispPath}")\r\n `, 'gbk'));
-    } catch (err) {
-        console.error(`[脚本错误] 写入失败: ${err}`);
-        return;
-    }
+  try {
+    // 必须使用 GBK 编码，AutoCAD 命令行不识别 UTF-8 的中文路径
+    fs.writeFileSync(
+      safeLispPath.replace(/\//g, "\\"),
+      iconv.encode(lispContent, "gbk"),
+    );
+    fs.writeFileSync(
+      safeScrPath.replace(/\//g, "\\"),
+      iconv.encode(`(load "${safeLispPath}")\r\n `, "gbk"),
+    );
+  } catch (err) {
+    console.error(`[脚本错误] 写入失败: ${err}`);
+    return `[脚本错误] 写入失败: ${err}`
+  }
 
-    // 2. 启动进程
-    try {
-        // 使用双引号包裹路径以处理空格
-        const child = spawn(`"${cadPath}"`, [
-            `"${dwgPath}"`, 
-            '/nologo', 
-            config.scriptFlag, 
-            `"${scrPath}"`
-        ], { 
-            detached: true, 
-            stdio: 'ignore',
-            shell: true 
-        });
+  try {
+    // spawn 启动时，dwgPath 必须保留原始反斜杠并加双引号包裹
+    const child = spawn(
+      `"${cadPath}"`,
+      [
+        `"${safeDwgPath}"`,
+        "/nologo",
+        config.scriptFlag,
+        `"${safeScrPath.replace(/\//g, "\\")}"`,
+      ],
+      {
+        detached: true,
+        stdio: "ignore",
+        shell: true,
+        windowsVerbatimArguments: true,
+      },
+    );
 
-        child.unref();
-        console.log(`[系统] 正在启动 ${config.brandName} 并定位产品: ${materialCode}`);
-    } catch (err) {
-        console.error(`[启动错误] ${config.brandName} 启动失败: ${err}`);
-    }
+    child.unref();
+    console.log(`[系统] 正在启动并定位网络路径: ${safeDwgPath}`);
+  } catch (err) {
+    return `[启动错误] ${err}`
+  }
 }
 /**
  * 强行定位到具体 DWG 文件的指定坐标
@@ -74,79 +99,79 @@ export async function professionalCadNavigate(
  * @param zoomHeight 缩放高度，默认500
  */
 export async function fixedCadLocate(
-    brand: CadBrand,
-    dwgPath: string,
-    x: number,
-    y: number,
-    zoomHeight: number = 500
+  brand: CadBrand,
+  dwgPath: string,
+  x: number,
+  y: number,
+  zoomHeight: number = 500,
 ) {
-    if (isNaN(x) || isNaN(y)) {
-        console.error("坐标数值无效");
-        return;
+  if (isNaN(x) || isNaN(y)) return;
+  const config = CAD_MAP[brand];
+  if (!config) return;
+
+  // 【关键修改】PowerShell 内部字符串处理
+  // 1. 获取绝对路径并规范化
+  const absolutePath = path.resolve(dwgPath);
+  // 2. 对于 PowerShell 脚本块，我们需要将路径中的单反斜杠转为双反斜杠
+  // 以便在 '$doc.FullName -eq ...' 比较时能正确匹配
+  const psSafePath = absolutePath.replace(/\\/g, "\\\\");
+  const fileName = path.basename(dwgPath);
+  // --- 新增：Node 层面初检 ---
+  if (!fs.existsSync(psSafePath)) {
+    console.error(`[定位取消]: 目标文件不存在: ${psSafePath}`);
+    return `[定位取消]: 目标文件不存在: ${psSafePath}`;
+  }
+  const psCommands = [
+    `$ErrorActionPreference = 'Stop'`,
+    `try {`,
+    // 获取 COM 对象
+    `  $cad = [Runtime.InteropServices.Marshal]::GetActiveObject('${config.progId}')`,
+    `  $targetDoc = $null`,
+    `  foreach ($doc in $cad.Documents) {`,
+    // 增加 ToLower() 比较以忽略大小写差异
+    `    if ($doc.FullName.ToLower() -eq '${psSafePath.toLowerCase()}' -or $doc.Name -eq '${fileName}') {`,
+    `      $targetDoc = $doc`,
+    `      break`,
+    `    }`,
+    `  }`,
+    // 如果没找到则打开
+    `  if ($targetDoc -eq $null) {`,
+    // 注意：PowerShell 判断 UNC 路径存在需要 Test-Path
+    `    if (Test-Path '${psSafePath}') {`,
+    `      $targetDoc = $cad.Documents.Open('${psSafePath}')`,
+    `    } else {`,
+    `      throw "无法访问网络路径: ${psSafePath}"`,
+    `    }`,
+    `  }`,
+    `  $targetDoc.Activate()`,
+    // 置顶逻辑
+    `  $process = Get-Process | Where-Object { $_.ProcessName -match '${brand}' } | Select-Object -First 1`,
+    `  if ($process) {`,
+    `    $wshell = New-Object -ComObject WScript.Shell`,
+    `    $wshell.AppActivate($process.Id)`,
+    `  }`,
+    // 发送命令
+    `  $esc = [char]27`,
+    `  $cmd = "$esc$esc._UCS _W ._ZOOM _C ${x},${y} ${zoomHeight} "`,
+    `  $targetDoc.SendCommand($cmd)`,
+    `  Write-Host 'Success'`,
+    `} catch {`,
+    `  Write-Error $_.Exception.Message`,
+    `  exit 1`,
+    `}`,
+  ].join("\r\n"); // 使用换行符提高可读性
+
+  // 使用 EncodedCommand 避免复杂的引号转义问题
+  const buffer = Buffer.from(psCommands, "utf16le");
+  const base64Str = buffer.toString("base64");
+  const fullCommand = `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${base64Str}`;
+
+  exec(fullCommand, { timeout: 15000 }, (error, stdout, stderr) => {
+    if (error) {
+      console.error(`[定位失败]: 检查文件是否在共享服务器上且有权限访问。`);
+      return `[定位失败]: 检查文件是否在共享服务器上且有权限访问。`;
+    } else {
+      console.log(`[定位成功]: 网络文件已置顶并跳转。`);
     }
-    const config = CAD_MAP[brand];
-    if (!config) {
-        console.error("不支持的 CAD 品牌");
-        return;
-    }
-
-    const formattedPath = path.resolve(dwgPath).replace(/\\/g, '\\\\');
-    const fileName = path.basename(dwgPath);
-
-    const psCommands = [
-        `$ErrorActionPreference = 'Stop'`,
-        `try {`,
-        // 1. 获取 CAD 对象
-        `  $cad = [Runtime.InteropServices.Marshal]::GetActiveObject('${config.progId}')`,
-        `  $targetDoc = $null`,
-        `  foreach ($doc in $cad.Documents) {`,
-        `    if ($doc.FullName -eq '${formattedPath}' -or $doc.Name -eq '${fileName}') {`,
-        `      $targetDoc = $doc`,
-        `      break`,
-        `    }`,
-        `  }`,
-        // 2. 如果没找到则打开
-        `  if ($targetDoc -eq $null) {`,
-        `    if (Test-Path '${formattedPath}') {`,
-        `      $targetDoc = $cad.Documents.Open('${formattedPath}')`,
-        `    } else {`,
-        `      throw "找不到文件: ${formattedPath}"`,
-        `    }`,
-        `  }`,
-        // 3. 文档级激活 (内部切换)
-        `  $targetDoc.Activate()`,
-        
-        // --- 核心置顶逻辑开始 ---
-        // 4. 获取进程并强制置顶主窗口
-        `  $process = Get-Process | Where-Object { $_.ProcessName -match '${brand}' } | Select-Object -First 1`,
-        `  if ($process) {`,
-        `    $wshell = New-Object -ComObject WScript.Shell`,
-        `    $wshell.AppActivate($process.Id)`, // 唤醒窗口
-        `  }`,
-        // --- 核心置顶逻辑结束 ---
-
-        `  $esc = [char]27`,
-        `  $cmd = "$esc$esc._UCS _W ._ZOOM _C ${x},${y} ${zoomHeight} "`,
-        `  $targetDoc.SendCommand($cmd)`,
-        `  Write-Host 'Success'`,
-        `} catch {`,
-        `  Write-Error $_.Exception.Message`,
-        `  exit 1`,
-        `}`
-    ].join('; ');
-
-    const buffer = Buffer.from(psCommands, 'utf16le');
-    const base64Str = buffer.toString('base64');
-    const fullCommand = `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${base64Str}`;
-
-    exec(fullCommand, { timeout: 15000 }, (error, stdout, stderr) => {
-        if (error) {
-            console.error(`[定位失败]: ${config.brandName} 操作异常`);
-            if (stderr.includes('0x800401E3')) {
-                console.warn(`建议: 请确保 ${config.brandName} 程序已在运行。`);
-            }
-        } else {
-            console.log(`[定位成功]: 已强行跳转并置顶 ${fileName}`);
-        }
-    });
+  });
 }
