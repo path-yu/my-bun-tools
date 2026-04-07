@@ -123,7 +123,7 @@ export function Header({ onOpenSettings }: HeaderProps) {
                     }`}>
                       <Wrench className="h-3.5 w-3.5" />
                     </div>
-                    <span className="flex-1 text-left">CAD 配置</span>
+                    <span className="flex-1 text-left">配置</span>
                   </button>
 
                   <div className={`my-1.5 h-px ${isDark ? 'bg-slate-700' : 'bg-slate-100'}`} />

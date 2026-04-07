@@ -107,13 +107,22 @@ export type DrawingRPC = {
         params: {
           brand: CadBrand;
           cadPath: string;
-          materialCode: string;
           dwgPath: string;
           x: number;
           y: number;
           zoomHeight?: number;
         };
         response: void;
+      };
+      selectDatabase: {
+        params: {
+          path: string;
+        };
+        response: { success: boolean; error?: string };
+      };
+       selectDatabaseFile: {
+        params: {};
+        response: { success: boolean; path?: string; error?: string; canceled?: boolean };
       };
     };
     messages: {};

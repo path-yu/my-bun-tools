@@ -15,6 +15,7 @@ import {
   CADConfig,
 } from "@/lib/types";
 import { getElectroView } from "@/lib/rpc";
+import { log } from "console";
 
 
 const DEFAULT_CAD_CONFIG: CADConfig = {
@@ -34,11 +35,25 @@ export default function DrawingManagerPage() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [cadConfig, setCadConfig] = useState<CADConfig>(DEFAULT_CAD_CONFIG);
+  const [dbPath, setDbPath] = useState<string>("");
 
   const load = async () => {
-  const electrobun = getElectroView();
+    const electrobun = getElectroView();
     const list = await electrobun.rpc!.request.getAll({});
-    console.log("Loaded drawings from Bun:", list, "333");
+    console.log(list);
+    
+    // 处理 list，从 filePath 中提取 fileName 并存入新字段
+    const processedList = list.map((drawing: any) => {
+      // 兼容 Windows (\) 和 Unix (/) 的路径分隔符
+      const fileName = drawing.filePath.split(/[/\\]/).pop() || '';
+
+      return {
+        ...drawing,
+        fileName: fileName // 动态添加 fileName 字段
+      };
+    });
+
+    setDrawings(processedList);
     setDrawings(list);
   };
   // 初始化主题和CAD配置
@@ -57,6 +72,21 @@ export default function DrawingManagerPage() {
     load();
     // 加载CAD配置
     const savedCADConfig = localStorage.getItem("cadConfig");
+    const savedDbPath = localStorage.getItem("dbPath");
+    if (savedDbPath) {
+      setDbPath(savedDbPath);
+      getElectroView().rpc!.request.selectDatabase({ path: savedDbPath }).then((res) => {
+        if (res.success) {
+          console.log("数据库路径已更新:", savedDbPath);
+          load(); // 刷新数据以反映新的数据库内容
+        }
+        else {
+          console.error("数据库路径更新失败:", res.error);
+        }
+      }).catch((err) => {
+        console.error("调用 selectDatabase RPC 失败:", err);
+      });
+    }
     if (savedCADConfig) {
       try {
         const config = JSON.parse(savedCADConfig) as CADConfig;
@@ -72,20 +102,25 @@ export default function DrawingManagerPage() {
   const handleSaveCADConfig = (config: CADConfig) => {
     setCadConfig(config);
     localStorage.setItem("cadConfig", JSON.stringify(config));
+    console.log("CAD配置已保存:", config);
   };
-
+  const handleSaveDbPath = (path: string) => {
+    // 保存数据库路径到本地存储
+    localStorage.setItem("dbPath", path);
+    setDbPath(path)
+  }
   // 筛选图纸
   const filteredDrawings = useMemo(() => {
     return drawings.filter((drawing) => {
       const matchesDrawingNumber = drawingNumber
         ? drawing.drawingNumber
-            .toLowerCase()
-            .includes(drawingNumber.toLowerCase())
+          .toLowerCase()
+          .includes(drawingNumber.toLowerCase())
         : true;
       const matchesMaterialCode = materialCode
         ? drawing.materialCode
-            .toLowerCase()
-            .includes(materialCode.toLowerCase())
+          .toLowerCase()
+          .includes(materialCode.toLowerCase())
         : true;
       const matchesCategory = selectedCategory
         ? drawing.fileName.includes(selectedCategory)
@@ -219,7 +254,7 @@ export default function DrawingManagerPage() {
             drawings={filteredDrawings}
             onEdit={handleOpenEdit}
             cadConfig={cadConfig}
-            onDelete={()=>{
+            onDelete={() => {
               load();
             }}
           />
@@ -243,6 +278,7 @@ export default function DrawingManagerPage() {
         onClose={() => setIsSettingsOpen(false)}
         cadConfig={cadConfig}
         onSaveCADConfig={handleSaveCADConfig}
+        onSaveDBPath={handleSaveDbPath}
       />
     </div>
   );

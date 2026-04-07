@@ -1,95 +1,10 @@
 import { exec, spawn } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
-import * as iconv from "iconv-lite";
 // 建议 1: 改为相对路径
 import { CAD_MAP, type CadBrand } from "../lib/types";
 
-/**
- * 工业级多 CAD 启动导航方案
- */
-export async function professionalCadNavigate(
-  brand: CadBrand,
-  cadPath: string,
-  materialCode: string,
-  dwgPath: string,
-  x: number,
-  y: number,
-  zoomHeight: number = 500,
-) {
-  const config = CAD_MAP[brand];
-  const scriptDir = path.join(process.cwd(), "cad_scripts");
-  if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir, { recursive: true });
 
-  // 【关键修改】Lisp 路径必须使用正斜杠，否则 UNC 路径会因转义失败
-  // 例如 \\SJWL\图纸.dwg -> //SJWL/图纸.dwg
-  const safeLispPath = path
-    .join(scriptDir, `logic_${materialCode}.lsp`)
-    .replace(/\\/g, "/");
-  const safeScrPath = path
-    .join(scriptDir, `boot_${materialCode}.scr`)
-    .replace(/\\/g, "/");
-  const safeDwgPath = dwgPath.replace(/\\/g, "/");
-  // --- 新增：文件存在性预检 ---
-  if (!fs.existsSync(safeDwgPath)) {
-    console.error(
-      `[启动取消]: 找不到图纸文件，请检查路径是否正确: ${safeDwgPath}`,
-    );
-    // 这里可以弹出你之前的 MUI 提示或通知
-    return  `[启动取消]: 找不到图纸文件，请检查路径是否正确: ${safeDwgPath}`
-  }
-  const lispContent = [
-    "(vl-load-com)",
-    "(defun c:smart_zoom ()",
-    '  (setvar "CMDECHO" 0)',
-    '  (command "_.DELAY" 3000)',
-    '  (command "._UCS" "_W")',
-    // 使用 rtos 确保 zoomHeight 转换为字符串，避免坐标列表中出现类型错误
-    `  (command "._ZOOM" "_C" (list ${x} ${y} 0) (rtos ${zoomHeight} 2 2))`,
-    "  (princ)",
-    ")",
-    "(c:smart_zoom)",
-  ].join("\r\n");
-
-  try {
-    // 必须使用 GBK 编码，AutoCAD 命令行不识别 UTF-8 的中文路径
-    fs.writeFileSync(
-      safeLispPath.replace(/\//g, "\\"),
-      iconv.encode(lispContent, "gbk"),
-    );
-    fs.writeFileSync(
-      safeScrPath.replace(/\//g, "\\"),
-      iconv.encode(`(load "${safeLispPath}")\r\n `, "gbk"),
-    );
-  } catch (err) {
-    console.error(`[脚本错误] 写入失败: ${err}`);
-    return `[脚本错误] 写入失败: ${err}`
-  }
-
-  try {
-    // spawn 启动时，dwgPath 必须保留原始反斜杠并加双引号包裹
-    const child = spawn(
-      `"${cadPath}"`,
-      [
-        `"${safeDwgPath}"`,
-        "/nologo",
-        config.scriptFlag,
-        `"${safeScrPath.replace(/\//g, "\\")}"`,
-      ],
-      {
-        detached: true,
-        stdio: "ignore",
-        shell: true,
-        windowsVerbatimArguments: true,
-      },
-    );
-
-    child.unref();
-    console.log(`[系统] 正在启动并定位网络路径: ${safeDwgPath}`);
-  } catch (err) {
-    return `[启动错误] ${err}`
-  }
-}
 /**
  * 强行定位到具体 DWG 文件的指定坐标
  * @param brand CAD品牌 (AutoCAD, ZWCAD 等)
@@ -172,6 +87,113 @@ export async function fixedCadLocate(
       return `[定位失败]: 检查文件是否在共享服务器上且有权限访问。`;
     } else {
       console.log(`[定位成功]: 网络文件已置顶并跳转。`);
+    }
+  });
+}
+
+/**
+ * 核心逻辑：智能启动并定位
+ * 1. 立即纯净启动 CAD
+ * 2. 异步轮询检测 CAD 是否加载就绪
+ * 3. 就绪后通过 PowerShell 发送 COM 指令定位
+ */
+export async function professionalCadNavigate(
+  brand: CadBrand,
+  cadPath: string,
+  dwgPath: string,
+  x: number,
+  y: number,
+  zoomHeight: number = 500
+) {
+    const config = CAD_MAP[brand]
+  if (!config) return "[错误]: 未定义的 CAD 品牌配置";
+
+  // --- 第一阶段：纯净启动 ---
+  // 不带任何 /b 脚本参数，彻底避免 EBUSY 和启动卡死
+  const safeDwgPath = path.resolve(dwgPath);
+  
+  try {
+    const child = spawn(`"${cadPath}"`, [`"${safeDwgPath}"`, "/nologo"], {
+      detached: true,
+      stdio: "ignore",
+      shell: true,
+      windowsVerbatimArguments: true,
+    });
+    child.unref(); 
+    console.log(`[启动] 已发起 CAD 启动指令，正在打开: ${path.basename(dwgPath)}`);
+  } catch (err) {
+    return `[启动失败]: ${err}`;
+  }
+
+  // --- 第二阶段：异步追击定位 ---
+  // 启动后每 2.5 秒探测一次 CAD 状态，直到定位成功或超时
+  let attempts = 0;
+  const maxAttempts = 20; // 最多等待 60 秒
+
+  const timer = setInterval(() => {
+    attempts++;
+    console.log(`[探测] 正在尝试连接 CAD 实例 (${attempts}/${maxAttempts})...`);
+
+    // 调用执行 PowerShell 定位逻辑
+    runPowerShellLocate(config.progId, safeDwgPath, x, y, zoomHeight, (success, msg) => {
+      if (success) {
+        clearInterval(timer);
+        console.log(`[定位成功]: ${msg}`);
+      } else if (attempts >= maxAttempts) {
+        clearInterval(timer);
+        console.error(`[定位超时]: CAD 响应过慢或权限受阻。`);
+        return `[定位超时]: CAD 响应过慢或权限受阻。`;
+      }
+    });
+  }, 3000);
+
+}
+/**
+ * 内部函数：通过 PowerShell 操控已打开的 CAD
+ */
+function runPowerShellLocate(
+  progId: string,
+  dwgPath: string,
+  x: number,
+  y: number,
+  zoomHeight: number,
+  callback: (success: boolean, msg: string) => void
+) {
+  const psSafePath = dwgPath.replace(/\\/g, "\\\\").toLowerCase();
+  const fileName = path.basename(dwgPath).toLowerCase();
+
+  const psCommands = [
+    `$ErrorActionPreference = 'Stop'`,
+    `try {`,
+    // 获取当前运行中的 CAD 实例
+    `  $cad = [Runtime.InteropServices.Marshal]::GetActiveObject('${progId}')`,
+    `  $targetDoc = $null`,
+    `  foreach ($doc in $cad.Documents) {`,
+    `    if ($doc.FullName.ToLower() -eq '${psSafePath}' -or $doc.Name.ToLower() -eq '${fileName}') {`,
+    `      $targetDoc = $doc; break`,
+    `    }`,
+    `  }`,
+    // 如果还没加载到这个文档，返回失败触发下一次轮询
+    `  if ($targetDoc -eq $null) { throw 'Wait' }`,
+    
+    // 执行定位指令
+    `  $targetDoc.Activate()`,
+    `  $esc = [char]27`,
+    `  $cmd = "$esc$esc._UCS _W ._ZOOM _C ${x},${y} ${zoomHeight} "`,
+    `  $targetDoc.SendCommand($cmd)`,
+    `  Write-Host 'OK'`,
+    `} catch { exit 1 }`
+  ].join("\r\n");
+
+  const buffer = Buffer.from(psCommands, "utf16le");
+  const base64Str = buffer.toString("base64");
+  const fullCommand = `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${base64Str}`;
+
+  exec(fullCommand, { timeout: 5000 }, (error, stdout) => {
+    if (!error && stdout.trim() === "OK") {
+      callback(true, "坐标已跳转");
+    } else {
+      callback(false, "等待就绪");
     }
   });
 }

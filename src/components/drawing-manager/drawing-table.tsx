@@ -151,7 +151,6 @@ export function DrawingTable({
       .rpc!.request.professionalCadNavigate({
         brand: cadTypeMap[cadConfig.type] || "AutoCAD",
         cadPath: cadConfig.path,
-        materialCode: drawing.materialCode,
         dwgPath: drawing.filePath,
         x: drawing.x ?? 0,
         y: drawing.y ?? 0,
