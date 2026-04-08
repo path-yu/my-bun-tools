@@ -1,5 +1,3 @@
-'use client'
-
 import { Search, ChevronDown, X, RotateCcw } from 'lucide-react'
 import { DrawingCategory } from '@/lib/types'
 import { categories } from '@/lib/mock-data'

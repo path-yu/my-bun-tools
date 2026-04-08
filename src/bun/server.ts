@@ -4,13 +4,18 @@ import { drawingSql } from "./db";
 const PORT = 3003;
 
 export const startCadServer = () => {
-  const app = new Elysia()
+  new Elysia()
     .post(
       "/uploadDrawings",
       ({ body, set }) => {
         const { filePath, data } = body;
         try {
-          const count = drawingSql.batchInsert(filePath, data);
+          const convertedData = data.map((item) => ({
+            ...item,
+            x: Number(item.x),
+            y: Number(item.y),
+          }));
+          const count = drawingSql.batchInsert(filePath, convertedData);
           return { status: "success", count };
         } catch (error) {
           console.error(`[事务失败] 数据已回滚:`, error);

@@ -1,5 +1,3 @@
-"use client";
-
 import { FileText, Settings, Moon, Sun, Wrench, Info } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { useAppTheme } from '@/components/ThemeContext' // 确保路径指向你的 Context

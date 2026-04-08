@@ -1,11 +1,8 @@
 import {
   BrowserWindow,
   Updater,
-  ApplicationMenu,
-  BrowserView,
 	Utils,
 } from "electrobun/bun";
-import { Electroview } from "electrobun/view";
 import { drawingRPC } from "./drawingRpc";
 import { startCadServer } from "./server";
 
@@ -32,10 +29,10 @@ async function getMainViewUrl(): Promise<string> {
 // Create the main application window
 const url = await getMainViewUrl();
 
-const win = new BrowserWindow({
+ new BrowserWindow({
   title: "Tools for drawing management",
   url,
-  frame: {
+   frame: {
     width: 1200,
     height: 700,
     x: 200,

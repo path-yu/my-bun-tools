@@ -2,10 +2,8 @@ import { RPCSchema } from "electrobun/bun";
 
 export type DrawingCategory = "不锈钢" | "碳钢" | "真空罐";
 
-// export type DrawingCategory = 'A' | 'B' | 'C'; // 假设你的分类定义
-
 export interface Drawing {
-  id: any; // 数据库是 INTEGER PRIMARY KEY，前端对应 number
+  id?: any; // 数据库是 INTEGER PRIMARY KEY，前端对应 number
   materialCode: string; // 数据库是 INTEGER PRIMARY KEY，前端对应 number
   drawingNumber: string; // 对应数据库 materialCode (物料编码/产品编号)
   filePath: string; // 对应数据库 filePath
@@ -33,7 +31,6 @@ export interface CADConfig {
   type: CADType |"";
   path: string;
 }
-// export type DrawingRPC = {
 //   bun: RPCSchema<{
 //     requests: {
 //       getAll: {
@@ -101,7 +98,7 @@ export type DrawingRPC = {
           y: number;
           zoomHeight?: number;
         };
-        response: void;
+        response: any;
       };
       professionalCadNavigate: {
         params: {
@@ -112,7 +109,7 @@ export type DrawingRPC = {
           y: number;
           zoomHeight?: number;
         };
-        response: void;
+        response:any;
       };
       selectDatabase: {
         params: {
@@ -120,10 +117,11 @@ export type DrawingRPC = {
         };
         response: { success: boolean; error?: string };
       };
-       selectDatabaseFile: {
+      selectDatabaseFile: {
         params: {};
         response: { success: boolean; path?: string; error?: string; canceled?: boolean };
       };
+
     };
     messages: {};
   }>;

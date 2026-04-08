@@ -1,7 +1,7 @@
-import { BrowserView, type RPCSchema } from "electrobun/bun";
-import { drawingSql, initializeDb, type Drawing } from "./db";
+import { BrowserView, Utils, type RPCSchema } from "electrobun/bun";
+import { drawingSql, initializeDb } from "./db";
 import { fixedCadLocate, professionalCadNavigate } from "./autoOpen";
-import { CadBrand } from "@/lib/types";
+import { CadBrand, Drawing } from "@/lib/types";
 
 export type DrawingRPC = {
   bun: RPCSchema<{
@@ -43,7 +43,7 @@ export type DrawingRPC = {
           y: number;
           zoomHeight?: number;
         };
-        response:any;
+        response: any;
       };
       selectDatabase: {
         params: {
@@ -53,9 +53,13 @@ export type DrawingRPC = {
       };
       selectDatabaseFile: {
         params: {};
-        response: { success: boolean; path?: string; error?: string; canceled?: boolean };
+        response: {
+          success: boolean;
+          path?: string;
+          error?: string;
+          canceled?: boolean;
+        };
       };
-
     };
     messages: {};
   }>;
@@ -69,7 +73,7 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
       // 1. 获取所有数据：注意现在 getAll 是个函数
       getAll: () => {
         // 之前是 .all()，现在直接执行函数
-        const data = drawingSql.getAll(); 
+        const data = drawingSql.getAll();
         return data;
       },
 
@@ -77,7 +81,15 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
       add: (data) => {
         try {
           // 适配你最新的 getDrawingSql 结构，或者直接调用封装好的函数
-          return drawingSql.upsert(data);
+          return drawingSql.upsert({
+            materialCode: data.materialCode || "",
+            drawingNumber: data.drawingNumber || "",
+            filePath: data.filePath || "",
+            fileName: data.fileName || "",
+            x: data.x ?? 0,
+            y: data.y ?? 0,
+            remarks: data.remarks || "",
+          });
         } catch (err) {
           console.error("数据库操作失败:", err);
           throw err;
@@ -89,18 +101,16 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
         try {
           console.log("正在更新 ID:", data.id);
           // 确保 ID 传到了最后
-          drawingSql.update(
-            {
-              id: data.id!,
-              materialCode: data.materialCode,  
-              drawingNumber: data.drawingNumber,
-              filePath: data.filePath,
-              fileName: data.fileName,
-              x: data.x,
-              y: data.y,
-              remarks: data.remarks,
-            }
-          );
+          drawingSql.update({
+            id: data.id!,
+            materialCode: data.materialCode,
+            drawingNumber: data.drawingNumber,
+            filePath: data.filePath,
+            fileName: data.fileName,
+            x: data.x,
+            y: data.y,
+            remarks: data.remarks,
+          });
           return data;
         } catch (err) {
           console.error("更新失败:", err);
@@ -113,27 +123,28 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
         return { success: true };
       },
 
-      // 4. 核心新增：解决你 SettingsModal 拿不到绝对路径的问题
-      // 前端 handleSelectDbFile 调用这个 RPC
       selectDatabaseFile: async () => {
         try {
-          // 使用 PowerShell 弹出 Windows 标准文件选择框，确保拿到绝对路径
-          const cmd = `
-            Add-Type -AssemblyName System.Windows.Forms;
-            $f = New-Object System.Windows.Forms.OpenFileDialog;
-            $f.Filter = "SQLite Database (*.db)|*.db|All Files (*.*)|*.*";
-            $f.Title = "请选择图纸管理系统数据库文件";
-            if($f.ShowDialog() -eq "OK") { $f.FileName }
-          `;
-          
-          const proc = Bun.spawnSync(["powershell", "-Command", cmd]);
-          const absolutePath = proc.stdout.toString().trim();
-          
-          if (!absolutePath) return { success: false, canceled: true };
-          
-          return { success: true, path: absolutePath };
+          const result = await Utils.openFileDialog({
+            canChooseFiles: true,
+            canChooseDirectory: false,
+            allowsMultipleSelection: true,
+          });
+          console.log("文件选择结果:", result);
+          // 用户取消
+          if (!result || result.length === 0) {
+            return { success: false, canceled: true };
+          }
+
+          return {
+            success: true,
+            path: result[0], // 单选
+          };
         } catch (error) {
-          return { success: false, error: "无法打开文件选择框" };
+          return {
+            success: false,
+            error: "无法打开文件选择框",
+          };
         }
       },
 
@@ -145,9 +156,9 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
           return { success: true };
         } catch (error) {
           console.error("数据库路径切换失败:", error);
-          return { 
-            success: false, 
-            error: error instanceof Error ? error.message : String(error) 
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
           };
         }
       },
@@ -157,8 +168,22 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
         return fixedCadLocate(cadType, dwgPath, x, y, zoomHeight);
       },
 
-      professionalCadNavigate: ({ brand, cadPath, dwgPath, x, y, zoomHeight = 500 }) => {
-        return professionalCadNavigate(brand, cadPath, dwgPath, x, y, zoomHeight);
+      professionalCadNavigate: ({
+        brand,
+        cadPath,
+        dwgPath,
+        x,
+        y,
+        zoomHeight = 500,
+      }) => {
+        return professionalCadNavigate(
+          brand,
+          cadPath,
+          dwgPath,
+          x,
+          y,
+          zoomHeight,
+        );
       },
     },
   },

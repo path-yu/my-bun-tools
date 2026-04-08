@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import { getElectroView } from "@/lib/rpc";
 import { useConfirm } from "../useConfirm";
-import { on } from "node:cluster";
 import { useToast } from "../useToast";
 
 // --- 内部小组件：分类标签 ---
@@ -144,7 +143,7 @@ export function DrawingTable({
   }, [isDark]);
   // 2. 业务逻辑处理
   const handleOpenInCAD = (drawing: Drawing) => {
-    if (!cadConfig?.path)  {
+    if (!cadConfig?.path) {
       return showToast("请先配置 CAD 路径", "error");
     }
     getElectroView()
@@ -157,14 +156,20 @@ export function DrawingTable({
         zoomHeight: 500,
       })
       .then((result: any) => {
+        // 后端返回字符串表示具体的提示或错误
         if (result) {
-          showToast(result,"error");
+          if (result.includes("失败") || result.includes("错误") || result.includes("超时")) {
+            showToast(result, "error");
+          } else {
+            // 对于 "[启动中]" 或 "[定位成功]" 等正向反馈
+            showToast(result, "success");
+          }
         }
       });
   };
 
   const handleQuickLocate = (drawing: Drawing) => {
-    if (!cadConfig?.path)  {
+    if (!cadConfig?.path) {
       return showToast("请先配置 CAD 路径", "error");
     }
     getElectroView()
@@ -177,7 +182,11 @@ export function DrawingTable({
       })
       .then((result: any) => {
         if (result) {
-          showToast(result,"error");
+          if (result.includes("失败") || result.includes("错误")) {
+            showToast(result, "error");
+          } else {
+            showToast("定位指令已发送", "success");
+          }
         }
       });
   };
@@ -388,11 +397,10 @@ export function DrawingTable({
   if (drawings.length === 0) {
     return (
       <div
-        className={`flex flex-col items-center justify-center rounded-2xl py-20 border-2 border-dashed ${
-          isDark
+        className={`flex flex-col items-center justify-center rounded-2xl py-20 border-2 border-dashed ${isDark
             ? "bg-slate-800/30 border-slate-700"
             : "bg-slate-50 border-slate-200"
-        }`}
+          }`}
       >
         <FileText className="h-12 w-12 text-slate-600 mb-4 opacity-20" />
         <p className="text-sm text-slate-500">暂无图纸记录，请先添加</p>

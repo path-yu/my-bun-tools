@@ -3,7 +3,7 @@ import { DrawingRPC } from './types';
 
 // 1. 定义 RPC 结构
 export const rpc = Electroview.defineRPC<DrawingRPC>({
-  maxRequestTime: 5000, 
+  maxRequestTime: 30000, 
   handlers: {
     requests: {},
     messages: {}

@@ -1,18 +1,7 @@
-import { X, ChevronDown, Upload, FileText, Check, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
-import { Drawing, DrawingCategory, DrawingFormData } from '@/lib/types'
-import { categories } from '@/lib/mock-data'
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { X,Upload, FileText, } from 'lucide-react'
+import { Drawing, DrawingFormData } from '@/lib/types'
 
-interface ParsedDrawing {
-  productmaterialCode: string
-  materialCode: string
-  drawingNumber: string
-  diameter: string
-  pressure: string
-  volume: string
-  category: DrawingCategory
-  fileName: string
-}
+import { useState, useEffect } from 'react'
 
 interface DrawingFormProps {
   isOpen: boolean
@@ -22,18 +11,14 @@ interface DrawingFormProps {
   onBatchSubmit?: (data: DrawingFormData[]) => void
 }
 
-export function DrawingForm({ isOpen, drawing, onClose, onSubmit, onBatchSubmit }: DrawingFormProps) {
+export function DrawingForm({ isOpen, drawing, onClose, onSubmit, }: DrawingFormProps) {
   const [formData, setFormData] = useState<DrawingFormData>({
     materialCode: '',
     drawingNumber: '',
     filePath: '',
     remarks: '',
   })
-  const [isCategoryOpen, setIsCategoryOpen] = useState(false)
-  const [importedDrawings, setImportedDrawings] = useState<ParsedDrawing[]>([])
-  const [currentImportIndex, setCurrentImportIndex] = useState(0)
-  
-  const categoryRef = useRef<HTMLDivElement>(null)
+
 
   // 1. 初始化与重置逻辑
   useEffect(() => {
@@ -53,8 +38,6 @@ export function DrawingForm({ isOpen, drawing, onClose, onSubmit, onBatchSubmit 
           remarks: '',
         })
       }
-      setImportedDrawings([])
-      setCurrentImportIndex(0)
     }
   }, [drawing, isOpen])
 
@@ -69,16 +52,7 @@ export function DrawingForm({ isOpen, drawing, onClose, onSubmit, onBatchSubmit 
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isOpen, onClose])
 
-  // 3. 点击分类下拉框外部关闭
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (categoryRef.current && !categoryRef.current.contains(event.target as Node)) {
-        setIsCategoryOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -174,7 +148,7 @@ export function DrawingForm({ isOpen, drawing, onClose, onSubmit, onBatchSubmit 
                     value={formData.remarks}
                     onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
                     placeholder="在此输入技术要求、变更记录或客户要求..."
-                    className="min-h-[100px] w-full rounded-xl border border-border bg-secondary/50 p-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all resize-none"
+                    className="min-h-25 w-full rounded-xl border border-border bg-secondary/50 p-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all resize-none"
                   />
                 </div>
               </div>

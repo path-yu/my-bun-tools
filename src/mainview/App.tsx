@@ -1,5 +1,3 @@
-"use client";
-
 import { useState, useMemo, useEffect } from "react";
 import { Plus } from "lucide-react";
 import { Header } from "@/components/drawing-manager/header";
@@ -15,8 +13,6 @@ import {
   CADConfig,
 } from "@/lib/types";
 import { getElectroView } from "@/lib/rpc";
-import { log } from "console";
-
 
 const DEFAULT_CAD_CONFIG: CADConfig = {
   type: "",
@@ -32,10 +28,8 @@ export default function DrawingManagerPage() {
   >("");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingDrawing, setEditingDrawing] = useState<Drawing | null>(null);
-  const [isDarkMode, setIsDarkMode] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [cadConfig, setCadConfig] = useState<CADConfig>(DEFAULT_CAD_CONFIG);
-  const [dbPath, setDbPath] = useState<string>("");
 
   const load = async () => {
     const electrobun = getElectroView();
@@ -58,23 +52,22 @@ export default function DrawingManagerPage() {
   };
   // 初始化主题和CAD配置
   useEffect(() => {
+    console.log('render');
+    
     // 加载主题
     const savedTheme = localStorage.getItem("theme");
     const prefersDark = window.matchMedia(
       "(prefers-color-scheme: dark)",
     ).matches;
-    getElectroView(); // 初始化Electroview单例
+    getElectroView(); // 初始化ElectroView单例
     const shouldBeDark = savedTheme === "dark" || (!savedTheme && prefersDark);
-    setIsDarkMode(shouldBeDark);
     if (shouldBeDark) {
       document.documentElement.classList.add("dark");
     }
-    load();
     // 加载CAD配置
     const savedCADConfig = localStorage.getItem("cadConfig");
     const savedDbPath = localStorage.getItem("dbPath");
     if (savedDbPath) {
-      setDbPath(savedDbPath);
       getElectroView().rpc!.request.selectDatabase({ path: savedDbPath }).then((res) => {
         if (res.success) {
           console.log("数据库路径已更新:", savedDbPath);
@@ -86,6 +79,8 @@ export default function DrawingManagerPage() {
       }).catch((err) => {
         console.error("调用 selectDatabase RPC 失败:", err);
       });
+    }else{
+      load(); // 没有保存的数据库路径，直接加载默认数据
     }
     if (savedCADConfig) {
       try {
@@ -107,7 +102,7 @@ export default function DrawingManagerPage() {
   const handleSaveDbPath = (path: string) => {
     // 保存数据库路径到本地存储
     localStorage.setItem("dbPath", path);
-    setDbPath(path)
+    load(); // 刷新数据以反映新的数据库内容
   }
   // 筛选图纸
   const filteredDrawings = useMemo(() => {

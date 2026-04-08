@@ -1,5 +1,3 @@
-'use client'
-
 import { FileText, Layers, Package, Gauge } from 'lucide-react'
 
 interface StatsCardsProps {
