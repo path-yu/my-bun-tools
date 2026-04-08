@@ -7,7 +7,8 @@
     "dev": "electrobun dev --watch",
     "dev:hmr": "concurrently \"bun run hmr\" \"bun run start\"",
     "hmr": "vite --port 5173",
-    "build:canary": "vite build && electrobun build --env=canary"
+    "build:canary": "vite build && electrobun build --env=canary",
+    "buildStandalone:canary": "vite build && electrobun build --platform win --arch x64 --portable"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
