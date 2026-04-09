@@ -158,7 +158,11 @@ export function DrawingTable({
       .then((result: any) => {
         // 后端返回字符串表示具体的提示或错误
         if (result) {
-          if (result.includes("失败") || result.includes("错误") || result.includes("超时")) {
+          if (
+            result.includes("失败") ||
+            result.includes("错误") ||
+            result.includes("超时")
+          ) {
             showToast(result, "error");
           } else {
             // 对于 "[启动中]" 或 "[定位成功]" 等正向反馈
@@ -231,22 +235,27 @@ export function DrawingTable({
         showToast("删除失败", "error");
       });
   };
-
-  // 3. 数据预处理（添加计算属性如分类标签）
-  const rows = useMemo(() => {
+const rows = useMemo(() => {
     return drawings.map((d) => {
-      const fileName = d.fileName || "";
-      const tag = fileName.includes("卧式")
-        ? "卧式储气罐"
-        : fileName.includes("碳钢")
-          ? "碳钢"
-          : fileName.includes("真空")
-            ? "真空罐"
-            : "其他";
-      return { ...d, tag };
+      const fileName = (d.fileName || "").trim();
+      
+      // 在这里根据文件名确定最终显示的分类标签
+      let categoryTag = "其他";
+      if (fileName.includes("卧式储气罐")) {
+        categoryTag = "卧式储气罐";
+      } else if (fileName.includes("碳钢")) {
+        categoryTag = "碳钢";
+      } else if (fileName.includes("真空")) {
+        categoryTag = "真空罐";
+      }
+
+      return { 
+        ...d, 
+        fileName, 
+        tag: categoryTag // 确保 tag 是 colorMap 里有的短 key
+      };
     });
   }, [drawings]);
-
   // 4. 定义表格列
   const columns: GridColDef[] = [
     {
@@ -397,10 +406,11 @@ export function DrawingTable({
   if (drawings.length === 0) {
     return (
       <div
-        className={`flex flex-col items-center justify-center rounded-2xl py-20 border-2 border-dashed ${isDark
+        className={`flex flex-col items-center justify-center rounded-2xl py-20 border-2 border-dashed ${
+          isDark
             ? "bg-slate-800/30 border-slate-700"
             : "bg-slate-50 border-slate-200"
-          }`}
+        }`}
       >
         <FileText className="h-12 w-12 text-slate-600 mb-4 opacity-20" />
         <p className="text-sm text-slate-500">暂无图纸记录，请先添加</p>

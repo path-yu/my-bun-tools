@@ -61,7 +61,7 @@
                                "\","
                                "\"drawingNumber\":\""
                                (nth 1 item)
-                               "\"," ;; 默认同 no
+                               "\"," ;; 默认同 图号
                                "\"x\":\""
                                (nth 2 item)
                                "\","
@@ -229,7 +229,19 @@
            )
     )
   )
-  (upload_to_backend final_list)
+  ;; (upload_to_backend final_list)
+  (princ "\n--- 提取结果调试预览 ---")
+      (setq i 1)
+      (foreach row (reverse final_list)
+        (princ (strcat "\n项目 [" (itoa i) "]:"))
+        (princ (strcat "\n  图号 (DrawingNo): " (nth 0 row)))
+        (princ (strcat "\n  产品名 (ProductName): " (nth 1 row)))
+        (princ (strcat "\n  物料编码 (MaterialCode): " (nth 2 row)))
+        (princ (strcat "\n  坐标位置 (X,Y): " (nth 3 row) "," (nth 4 row)))
+        (princ "\n  -----------------------")
+        (setq i (1+ i))
+      )
+      (princ (strcat "\n[调试] 共提取到 " (itoa (length final_list)) " 组数据。"))
   (princ)
 )
 

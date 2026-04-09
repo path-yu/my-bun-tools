@@ -39,7 +39,7 @@ export function Header({ onOpenSettings }: HeaderProps) {
           </div>
           <div>
             <h1 className={`text-sm font-bold tracking-tight ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
-              图纸管理系统
+              图纸管理系统1
             </h1>
             <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Engineering Docs</p>
           </div>

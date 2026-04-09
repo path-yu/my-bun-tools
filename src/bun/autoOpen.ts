@@ -2,32 +2,88 @@ import { exec, spawn } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import { CAD_MAP, type CadBrand } from "../lib/types";
+import * as os from "os";
 
+function writeLog(message: string) {
+  const logPath = path.join(os.tmpdir(), "cad-debug.log"); // 也可以指定固定目录
+  const timestamp = new Date().toLocaleString();
+  const logContent = `[${timestamp}] ${message}\n`;
+  try {
+    fs.appendFileSync(logPath, logContent, "utf8");
+  } catch (err) {
+    console.error("无法写入日志文件:", err);
+  }
+}
 function validatePaths(
   cadPath?: string,
   dwgPath?: string,
 ): { valid: boolean; msg: string } {
   if (cadPath !== undefined) {
-    const cleanCad = sanitizePath(cadPath); // 清洗路径
-    if (!fs.existsSync(cleanCad)) {
+    const cleanCad = sanitizePath(cadPath);
+    const exists = fs.existsSync(cleanCad);
+    writeLog(`[CAD校验] 路径: ${cleanCad} | 是否存在: ${exists}`);
+
+    if (!exists) {
       return {
         valid: false,
         msg: `[启动失败]: CAD 程序路径不存在: ${cleanCad}`,
       };
     }
-    // ...
   }
 
   if (dwgPath !== undefined) {
-    const cleanDwg = sanitizePath(dwgPath); // 清洗路径
-    if (!fs.existsSync(cleanDwg)) {
+    const cleanDwg = sanitizePath(dwgPath);
+    const exists = fs.existsSync(cleanDwg);
+
+    // 关键日志：记录原始路径、清洗后路径和权限测试
+    writeLog(`[DWG校验] 原始输入: ${dwgPath}`);
+    writeLog(`[DWG校验] 清洗后: ${cleanDwg}`);
+    writeLog(`[DWG校验] 是否存在: ${exists}`);
+
+    if (!exists) {
+      // 尝试列出父目录内容，判断是网络断开还是权限问题
+      try {
+        const parent = path.dirname(cleanDwg);
+        if (fs.existsSync(parent)) {
+          writeLog(
+            `[DWG校验] 父目录存在，内容: ${fs.readdirSync(parent).join(", ")}`,
+          );
+        } else {
+          writeLog(`[DWG校验] 无法访问父目录: ${parent}`);
+        }
+      } catch (e: any) {
+        writeLog(`[DWG校验] 权限检查错误: ${e.message}`);
+      }
+
       return { valid: false, msg: `[路径错误]: 目标图纸不存在: ${cleanDwg}` };
     }
-    // ...
   }
   return { valid: true, msg: "OK" };
 }
+function sanitizePath(rawPath: string): string {
+  if (!rawPath) return "";
 
+  // 1. 统一正斜杠
+  let p = rawPath.replace(/\//g, "\\");
+
+  // 2. 检查是否为 UNC 路径 (\\Server\Share)
+  const isUNC = p.startsWith("\\\\");
+
+  // 3. 规范化
+  p = path.normalize(p);
+
+  // 4. 修复 normalize 可能吃掉 UNC 开头的问题
+  if (isUNC && !p.startsWith("\\\\")) {
+    // 如果被变成了 \Server\Share，则补回一个 \
+    if (p.startsWith("\\")) {
+      p = "\\" + p;
+    } else {
+      p = "\\\\" + p;
+    }
+  }
+
+  return p;
+}
 /**
  * 强行定位到具体 DWG 文件的指定坐标
  */
@@ -205,7 +261,11 @@ function executePowerShell(
     exec(
       `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${base64Str}`,
       { timeout: 10000 },
-      (error) => {
+      (error, stdout) => {
+        if (error || stdout.includes("PS_ERROR")) {
+          writeLog(`[PS执行失败]: ${stdout || error?.message}`);
+          resolve(`[${failMsg}]: ${stdout}`);
+        }
         if (error) {
           resolve(`[${failMsg}]: CAD 实例未就绪或图纸被独占`);
         } else {
@@ -214,24 +274,4 @@ function executePowerShell(
       },
     );
   });
-}
-
-/**
- * 路径清洗工具：处理多余的斜杠并规范化
- */
-function sanitizePath(rawPath: string): string {
-  if (!rawPath) return "";
-
-  // 1. 将所有正斜杠 / 统一替换为反斜杠 \
-  let p = rawPath.replace(/\//g, "\\");
-
-  // 2. 处理重复的开头斜杠
-  // 如果路径以 4 个反斜杠开头，收缩为 2 个 (UNC 标准)
-  if (p.startsWith("\\\\\\\\")) {
-    p = "\\\\" + p.slice(4);
-  }
-
-  // 3. 使用 path.normalize 处理中间的多余斜杠（如 a\\\b -> a\b）
-  // 并处理相对路径符号
-  return path.normalize(p);
 }

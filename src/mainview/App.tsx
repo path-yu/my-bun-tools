@@ -46,7 +46,8 @@ export default function DrawingManagerPage() {
         fileName: fileName // 动态添加 fileName 字段
       };
     });
-
+    console.log(processedList);
+    
     setDrawings(processedList);
     setDrawings(list);
   };
@@ -133,7 +134,7 @@ export default function DrawingManagerPage() {
       vacuum: drawings.filter((d) => d.fileName === "真空罐").length,
       // 卧式储气罐新标准
       horizontalVacuum: drawings.filter((d) =>
-        d.fileName.includes("卧式储气罐新标准"),
+        d.fileName?.includes("卧式储气罐新标准"),
       ).length,
     };
   }, [drawings]);
