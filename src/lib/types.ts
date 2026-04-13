@@ -1,6 +1,6 @@
 import { RPCSchema } from "electrobun/bun";
 
-export type DrawingCategory = "不锈钢" | "碳钢" | "真空罐";
+export type DrawingCategory = "不锈钢" | "碳钢" | "真空罐"|'卧式储气罐';
 
 export interface Drawing {
   id?: any; // 数据库是 INTEGER PRIMARY KEY，前端对应 number

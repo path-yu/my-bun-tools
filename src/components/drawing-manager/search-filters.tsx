@@ -131,13 +131,7 @@ export function SearchFilters({
                     className={`flex w-full items-center px-4 py-3 text-left text-sm transition-colors hover:bg-secondary ${selectedCategory === category ? 'bg-secondary text-primary' : 'text-foreground'}`}
                   >
                     <span
-                      className={`mr-3 h-2 w-2 rounded-full ${
-                        category === '不锈钢'
-                          ? 'bg-blue-500'
-                          : category === '碳钢'
-                            ? 'bg-orange-500'
-                            : 'bg-emerald-500'
-                      }`}
+                    
                     />
                     {category}
                   </button>

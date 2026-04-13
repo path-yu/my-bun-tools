@@ -34,27 +34,30 @@ export default function DrawingManagerPage() {
   const load = async () => {
     const electrobun = getElectroView();
     const list = await electrobun.rpc!.request.getAll({});
-    console.log(list);
-    
+
     // 处理 list，从 filePath 中提取 fileName 并存入新字段
     const processedList = list.map((drawing: any) => {
       // 兼容 Windows (\) 和 Unix (/) 的路径分隔符
-      const fileName = drawing.filePath.split(/[/\\]/).pop() || '';
+      const fullFileName = drawing.filePath.split(/[/\\]/).pop() || "";
+      const lastDotIndex = fullFileName.lastIndexOf(".");
+      const fileName =
+        lastDotIndex !== -1
+          ? fullFileName.substring(0, lastDotIndex)
+          : fullFileName;
 
       return {
         ...drawing,
-        fileName: fileName // 动态添加 fileName 字段
+        fileName: fileName, // 动态添加 fileName 字段
       };
     });
-    console.log(processedList);
-    
+    console.log(processedList,3);
+
     setDrawings(processedList);
-    setDrawings(list);
   };
   // 初始化主题和CAD配置
   useEffect(() => {
-    console.log('render');
-    
+    console.log("render");
+
     // 加载主题
     const savedTheme = localStorage.getItem("theme");
     const prefersDark = window.matchMedia(
@@ -69,18 +72,20 @@ export default function DrawingManagerPage() {
     const savedCADConfig = localStorage.getItem("cadConfig");
     const savedDbPath = localStorage.getItem("dbPath");
     if (savedDbPath) {
-      getElectroView().rpc!.request.selectDatabase({ path: savedDbPath }).then((res) => {
-        if (res.success) {
-          console.log("数据库路径已更新:", savedDbPath);
-          load(); // 刷新数据以反映新的数据库内容
-        }
-        else {
-          console.error("数据库路径更新失败:", res.error);
-        }
-      }).catch((err) => {
-        console.error("调用 selectDatabase RPC 失败:", err);
-      });
-    }else{
+      getElectroView()
+        .rpc!.request.selectDatabase({ path: savedDbPath })
+        .then((res) => {
+          if (res.success) {
+            console.log("数据库路径已更新:", savedDbPath);
+            load(); // 刷新数据以反映新的数据库内容
+          } else {
+            console.error("数据库路径更新失败:", res.error);
+          }
+        })
+        .catch((err) => {
+          console.error("调用 selectDatabase RPC 失败:", err);
+        });
+    } else {
       load(); // 没有保存的数据库路径，直接加载默认数据
     }
     if (savedCADConfig) {
@@ -93,7 +98,6 @@ export default function DrawingManagerPage() {
     }
   }, []);
 
-
   // 保存CAD配置
   const handleSaveCADConfig = (config: CADConfig) => {
     setCadConfig(config);
@@ -104,19 +108,19 @@ export default function DrawingManagerPage() {
     // 保存数据库路径到本地存储
     localStorage.setItem("dbPath", path);
     load(); // 刷新数据以反映新的数据库内容
-  }
+  };
   // 筛选图纸
   const filteredDrawings = useMemo(() => {
     return drawings.filter((drawing) => {
       const matchesDrawingNumber = drawingNumber
         ? drawing.drawingNumber
-          .toLowerCase()
-          .includes(drawingNumber.toLowerCase())
+            .toLowerCase()
+            .includes(drawingNumber.toLowerCase())
         : true;
       const matchesMaterialCode = materialCode
         ? drawing.materialCode
-          .toLowerCase()
-          .includes(materialCode.toLowerCase())
+            .toLowerCase()
+            .includes(materialCode.toLowerCase())
         : true;
       const matchesCategory = selectedCategory
         ? drawing.fileName.includes(selectedCategory)
@@ -180,10 +184,10 @@ export default function DrawingManagerPage() {
     getElectroView().rpc!.request.update({
       id: editingDrawing.id,
       ...data,
-      fileName: ""
+      fileName: "",
     });
     console.log(data, "111");
-    load(); // 刷新列表以获取最新数据 
+    load(); // 刷新列表以获取最新数据
   };
 
   // 打开编辑表单
@@ -200,9 +204,7 @@ export default function DrawingManagerPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header
-        onOpenSettings={() => setIsSettingsOpen(true)}
-      />
+      <Header onOpenSettings={() => setIsSettingsOpen(true)} />
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <div className="space-y-6">

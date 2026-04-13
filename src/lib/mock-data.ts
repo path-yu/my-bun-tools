@@ -57,4 +57,4 @@ export const mockDrawings: Drawing[] = [
   },
 ]
 
-export const categories: DrawingCategory[] = ['不锈钢', '碳钢', '真空罐']
+export const categories: DrawingCategory[] = ['不锈钢', '碳钢', '真空罐','卧式储气罐']

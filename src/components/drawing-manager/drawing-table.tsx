@@ -131,7 +131,6 @@ export function DrawingTable({
   useEffect(() => {
     // 同步 MUI 主题到 DOM，确保组件库样式正确切换
     const root = window.document.documentElement;
-    console.log(isDark);
 
     if (isDark) {
       root.classList.add("dark");
@@ -220,13 +219,11 @@ export function DrawingTable({
   };
 
   const executeDelete = (row: any) => {
-    console.log("执行删除:", row);
     // 你的删除 API 逻辑
     getElectroView()
       .rpc!.request.delete({ id: row.id })
       .then(() => {
         // 这里可以添加删除成功后的反馈，比如刷新列表
-        console.log("删除成功");
         showToast("删除成功", "success");
         onDelete && onDelete(row); // 调用父组件传入的删除回调，刷新列表
       })
@@ -238,7 +235,6 @@ export function DrawingTable({
 const rows = useMemo(() => {
     return drawings.map((d) => {
       const fileName = (d.fileName || "").trim();
-      
       // 在这里根据文件名确定最终显示的分类标签
       let categoryTag = "其他";
       if (fileName.includes("卧式储气罐")) {
