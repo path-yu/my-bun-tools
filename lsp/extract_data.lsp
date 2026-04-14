@@ -164,12 +164,20 @@
         ;; B. 寻找图号和物料编码
         (if (and (> tx (- ax 1000)) (< tx ax)) 
           (cond 
+            ;; 物料编码通常在倒数第二格
             ((and (>= (length y_hits) 4) (>= ty (nth 1 y_hits)) (<= ty (nth 2 y_hits)))
-             (setq tmp (clean_final_logic tstr))
-             (if (> (strlen tmp) 2) (setq cur_m tmp cur_x tx cur_y_pt ty)))
+            (setq tmp (clean_final_logic tstr))
+            (if (> (strlen tmp) 2) (setq cur_m tmp cur_x tx cur_y_pt ty)))
+            
+            ;; 图号：锁定在第3条和第4条线之间，且更靠近右下角
             ((and (>= (length y_hits) 4) (>= ty (nth 2 y_hits)) (<= ty (nth 3 y_hits)))
-             (setq tmp (clean_final_logic tstr))
-             (if (> (strlen tmp) 2) (setq cur_d tmp)))
+            (setq tmp (clean_final_logic tstr))
+            ;; 过滤掉带 'MPa' 或 'm3' 的干扰项 (根据你的错误样本增加判断)
+            (if (and (> (strlen tmp) 2) 
+                      (not (vl-string-search "MPa" tstr))
+                      (not (vl-string-search "m3" tstr)))
+                (setq cur_d tmp)
+            ));
           )
         )
       )
@@ -440,7 +448,6 @@
             ;; 构造写入 TXT 的数据行
             (setq item_str (strcat 
                              (nth 0 row) " | " 
-                             (nth 0 row) " | " 
                              (nth 1 row) " | " 
                              (nth 2 row) " | " 
                              zoom_cmd))
@@ -594,7 +601,41 @@
   (setvar "OSMODE" old_osmode)
   (princ)
 )
+;; ==========================================================
+;; 14. CA 命令 - 提取数据并拼接字符串到剪切板
+;; ==========================================================
+(defun c:CA (/ final_list res_str item m_code d_num p_code)
+  (setvar "CMDECHO" 0)
+  (princ "\n[系统] 正在扫描图纸并生成拼接字符串...")
 
+  (setq txt_data (collect_all_text_data))
+  (setq final_list (scan_and_extract_boxes))
+
+  (if (and final_list (> (length final_list) 0))
+    (progn
+      (setq res_str "")
+      (foreach item (reverse final_list)
+        (setq m_code (nth 0 item)           ; 物料编码
+              d_num  (nth 1 item)           ; 图号
+              p_code (nth 2 item))          ; 产品编码
+
+        ;; 将图号中的 / 转换为 -
+        (while (vl-string-search "/" d_num)
+          (setq d_num (vl-string-subst "-" "/" d_num))
+        )
+
+        ;; 拼接每组数据：物料编码-图号-产品编码
+        (setq res_str (strcat res_str m_code "-" d_num "-" p_code "\n"))
+      )
+
+      ;; 调用剪切板函数
+      (set_clipboard res_str)
+      (princ (strcat "\n[成功] 已提取 " (itoa (length final_list)) " 组数据并复制到剪切板。"))
+    )
+    (princ "\n[错误] 未能识别到符合条件的图纸数据。")
+  )
+  (princ)
+)
 ;; ==========================================================
 ;; 加载提示
 ;; ==========================================================
@@ -602,7 +643,8 @@
 (princ "\n--- BEXK 命令加载成功：框选提取数据 ---")
 (princ "\n--- GTA 命令 - 提取数据并导出为 TXT ---")
 (princ "\n--- EXK 命令加载成功：全图扫描并上传 ---")
-
+(princ "\n--- CA命令加载成功：全图复制剪切板文件名 ---")
+(princ "\n--- BPA命令加载成功：全图打印图纸到打印机 ---")
 ;; 热更新快捷键
 (setq _current_lsp_path "C:/Users/19746/Desktop/node/extract_data.lsp") 
 (defun c:EAD ()
@@ -610,5 +652,95 @@
   (princ (strcat "\n[热更新] 已重载: " _current_lsp_path))
   (princ)
 )
+;; ==========================================================
+;; 15. BPA 命令 - 修复版 (解决 lentityp nil 错误)
+;; ==========================================================
+(defun c:BPA (/ ss_all i ent_out ed_out vlist_out p1_out p2_out out_area 
+               ss_inner k obj_in in_ed in_vlist in_min in_max in_area ratio 
+               printer_name count)
+  
+  (vl-load-com)
+  (setq old_cmdecho (getvar "CMDECHO") 
+        old_osmode (getvar "OSMODE"))
+  (setvar "CMDECHO" 0) 
+  (setvar "OSMODE" 0)
 
+  ;; 1. 设定物理打印机名称 (请确保这里是你二号机的真实驱动名)
+  (setq printer_name "二号机打印机名称.pc3") 
+  (setq count 0)
+
+  (princ "\n[系统] 正在按 ESA 嵌套逻辑扫描外框...")
+
+  ;; 2. 扫描全图所有闭合多段线
+  (if (setq ss_all (ssget "X" '((0 . "LWPOLYLINE") (70 . 1)))) 
+    (progn 
+      (setq i 0)
+      (repeat (sslength ss_all) 
+        (setq ent_out (ssname ss_all i))
+        (if (and ent_out (entget ent_out)) ; 确保实体存在
+          (progn
+            (setq ed_out (entget ent_out)
+                  vlist_out (mapcar 'cdr (vl-remove-if-not '(lambda (x) (= 10 (car x))) ed_out))
+                  p1_out (list (apply 'min (mapcar 'car vlist_out)) (apply 'min (mapcar 'cadr vlist_out)))
+                  p2_out (list (apply 'max (mapcar 'car vlist_out)) (apply 'max (mapcar 'cadr vlist_out)))
+                  out_area (abs (* (- (car p2_out) (car p1_out)) (- (cadr p2_out) (cadr p1_out)))))
+
+            ;; 过滤外框面积 (A4约 6e4, A3约 1.2e5, 这里你的 1e6 是针对大图的)
+            (if (and (> out_area 1000000.0) (< out_area 400000000.0))
+              (progn
+                ;; 3. 在外框范围内寻找内框
+                (if (setq ss_inner (ssget "C" p1_out p2_out '((0 . "LWPOLYLINE") (70 . 1))))
+                  (progn
+                    (setq k 0)
+                    (repeat (sslength ss_inner)
+                      (setq obj_in (ssname ss_inner k))
+                      (if (and obj_in (not (equal obj_in ent_out))) ; 确保内框不是外框本身
+                        (progn
+                          (setq in_ed (entget obj_in)
+                                in_vlist (mapcar 'cdr (vl-remove-if-not '(lambda (x) (= 10 (car x))) in_ed))
+                                in_min (list (apply 'min (mapcar 'car in_vlist)) (apply 'min (mapcar 'cadr in_vlist)))
+                                in_max (list (apply 'max (mapcar 'car in_vlist)) (apply 'max (mapcar 'cadr in_vlist)))
+                                in_area (abs (* (- (car in_max) (car in_min)) (- (cadr in_max) (cadr in_min))))
+                                ratio (/ in_area out_area))
+
+                          ;; 4. 判定比例
+                          (if (and (> ratio 0.85) (< ratio 0.98))
+                            (progn
+                              ;; 检查 draw_debug_rect 是否存在，若报错则临时定义一个
+                              (if (and p1_out p2_out)
+                                (progn
+                                  ;; 模拟 ESA 的调试框绘制
+                                  (entmake (list '(0 . "LINE") '(62 . 1) (cons 10 p1_out) (cons 11 (list (car p2_out) (cadr p1_out)))))
+                                  (entmake (list '(0 . "LINE") '(62 . 1) (cons 10 p1_out) (cons 11 (list (car p1_out) (cadr p2_out)))))
+                                  (princ (strcat "\n[打印中] 发现标准图框，发送至: " printer_name))
+                                  
+                                  ;; (command "-PLOT" "Y" "" printer_name 
+                                  ;;          "ISO full bleed A3 (297.00 x 420.00 毫米)" 
+                                  ;;          "M" "L" "N" "W" "non" p1_out "non" p2_out "F" "C" "Y" 
+                                  ;;          "monochrome.ctb" "Y" "N" "N" "Y")
+                                  
+                                  (setq count (1+ count))
+                                  (setq k (sslength ss_inner)) ; 跳出内循环
+                                ))
+                            )
+                          )
+                        ))
+                      (setq k (1+ k))
+                    )
+                  )
+                )
+              )
+            )
+          ))
+        (setq i (1+ i))
+      )
+      (princ (strcat "\n[完成] 共成功打印 " (itoa count) " 张图纸。"))
+    )
+    (princ "\n[错误] 未能在图中找到任何闭合线。")
+  )
+
+  (setvar "CMDECHO" old_cmdecho)
+  (setvar "OSMODE" old_osmode)
+  (princ)
+)
 (princ "\n--- extract_data.lsp 已优化加载完成 ---")
