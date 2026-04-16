@@ -143,21 +143,25 @@
               ty   (cadr (car item))
               tstr (cadr item)
         )
-        ;; A. 寻找产品编码 (左上角最近距离)
+       ;; A. 寻找产品编码 (左上角最近距离 + 长度过滤)
         (if (and (>= tx (car s_min)) (<= tx (car s_max))
                  (>= ty (cadr s_min)) (<= ty (cadr s_max)))
           (progn 
-            
             (setq tmp (clean_final_logic tstr))
-            (if (/= tmp "")
+            ;; --- 优化逻辑开始 ---
+            (if (and (/= tmp "") 
+                     (> (strlen tmp) 1)                        ;; 过滤：长度必须大于1（排除单位数字序号）
+                     (not (member tmp '("1" "2" "3" "4" "5","N2"))) ;; 过滤：排除常见的单位数字干扰
+                )
               (progn
                 (setq dist (distance top_left (list tx ty)))
                 (if (< dist min_dist)
                   (setq min_dist dist
-                        cur_p    tmp)
+                        cur_p     tmp)
                 )
               )
             )
+            ;; --- 优化逻辑结束 ---
           )
         )
 
@@ -743,4 +747,90 @@
   (setvar "OSMODE" old_osmode)
   (princ)
 )
+;; ==========================================================
+;; 16. EJSON 命令 - 全图提取并格式化保存 JSON (修复加载失败版本)
+;; ==========================================================
+(defun c:EJSON (/ desktop json_file dwg_path txt_data final_list new_block 
+                 first_item item m_code d_num p_code cur_x cur_y zoom_cmd 
+                 all_content f_read line f_write)
+  (setvar "CMDECHO" 0)
+  (vl-load-com)
+  
+  ;; 获取桌面路径和文件路径
+  (setq desktop (strcat (getenv "USERPROFILE") "\\Desktop\\"))
+  (setq json_file (strcat desktop "drawings_data.json"))
+  (setq dwg_path (strcat (getvar "DWGPREFIX") (getvar "DWGNAME")))
+  (setq dwg_path (vl-string-translate "\\" "/" dwg_path))
+
+  (princ "\n[系统] 正在扫描图纸并生成 JSON...")
+
+  ;; 1. 获取数据 (确保调用已有的函数)
+  (setq txt_data (collect_all_text_data))
+  (setq final_list (scan_and_extract_boxes))
+
+  (if (and final_list (> (length final_list) 0))
+    (progn
+      ;; 2. 构造当前图纸的 JSON 块 (保持 GBK 字节流)
+      (setq new_block (strcat "  {\n"
+                              "    \"filePath\": \"" dwg_path "\",\n"
+                              "    \"list\": [\n"))
+      
+      (setq first_item t)
+      (foreach item (reverse final_list)
+        (setq m_code (nth 0 item)
+              d_num  (nth 1 item)
+              p_code (nth 2 item)
+              cur_x  (nth 3 item)
+              cur_y  (nth 4 item))
+        (setq zoom_cmd (strcat "ZOOM C " cur_x "," cur_y " 500"))
+
+        (if (not first_item) (setq new_block (strcat new_block ",\n")))
+        
+        (setq new_block (strcat new_block 
+          "      {\n"
+          "        \"productCode\": \"" p_code "\",\n"
+          "        \"materialCode\": \"" m_code "\",\n"
+          "        \"pictureNo\": \"" d_num "\",\n"
+          "        \"locationCommand\": \"" zoom_cmd "\"\n"
+          "      }"))
+        (setq first_item nil)
+      )
+      (setq new_block (strcat new_block "\n    ]\n" "  }"))
+
+      ;; 3. 读取并合并旧文件内容
+      (setq all_content "")
+      (if (findfile json_file)
+        (progn
+          (setq f_read (open json_file "r"))
+          (while (setq line (read-line f_read))
+            (setq all_content (strcat all_content line "\n"))
+          )
+          (close f_read)
+          
+          ;; 移除旧文件结尾的 ]
+          (setq all_content (vl-string-right-trim " \n\r\t]" all_content))
+          (if (and all_content (> (strlen all_content) 1))
+            (setq all_content (strcat all_content ",\n" new_block "\n]"))
+            (setq all_content (strcat "[\n" new_block "\n]"))
+          )
+        )
+        (setq all_content (strcat "[\n" new_block "\n]"))
+      )
+
+      ;; 4. 写入文件
+      (setq f_write (open json_file "w"))
+      (if f_write
+        (progn
+          (princ all_content f_write)
+          (close f_write)
+          (princ (strcat "\n[成功] 数据已写入: " json_file))
+        )
+        (princ "\n[错误] 无法打开写入文件，可能被其他程序占用。")
+      )
+    )
+    (princ "\n[提示] 未找到符合条件的数据。")
+  )
+  (princ)
+)
+(princ "\n--- EJSON 命令加载成功：全图生成/追加 JSON 数据到桌面 ---")
 (princ "\n--- extract_data.lsp 已优化加载完成 ---")
