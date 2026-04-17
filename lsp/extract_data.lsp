@@ -302,60 +302,103 @@
 ;; ==========================================================
 ;; 7. 公共函数 - 单张PDF导出核心流程
 ;; ==========================================================
-(defun export_single_pdf (ent_out res p1_out p2_out / cen pdfname path ss_members member_handles 
-                          ss_all_now hide_list p1_new p2_new vla_obj_out m_idx n_idx cur_ent h)
-  
+(defun export_single_pdf (ent_out res p1_out p2_out / pdfname path p1_new p2_new 
+                          vla_obj_out debug_rect
+                         ) 
+
+  (vl-load-com)
   (setq vla_obj_out (vlax-ename->vla-object ent_out)
-        pdfname (strcat (nth 0 res) "-" (nth 1 res) "-" (nth 2 res) ".pdf")
-        pdfname (vl-string-translate "/\\:*?\"<>|" "_________" pdfname)
-        path (strcat desktop pdfname)
-        cen (list (/ (+ (car p1_out) (car p2_out)) 2.0) 
-                  (/ (+ (cadr p1_out) (cadr p2_out)) 2.0) 0.0))
+        pdfname     (strcat (nth 0 res) "-" (nth 1 res) "-" (nth 2 res) ".pdf")
+        pdfname     (vl-string-translate "/\\:*?\"<>|" "_________" pdfname)
+        path        (strcat desktop pdfname)
+  )
 
-  (setq member_handles '() hide_list '())
+  ;; ==========================================================
+  ;; 1. 環境切換
+  ;; ==========================================================
+  (command "_.UCS" "_W")
+  (command "_.UCS" "_Z" "90") ; 旋轉座標系
 
-  ;; 缓存当前外框内部所有成员
-  (setq ss_members (ssget "W" p1_out p2_out))
-  (if ss_members
-    (progn
-      (setq m_idx 0)
-      (repeat (sslength ss_members)
-        (setq member_handles (cons (cdr (assoc 5 (entget (ssname ss_members m_idx)))) member_handles))
-        (setq m_idx (1+ m_idx)))
-      (ssadd ent_out ss_members))
-    (setq ss_members (ssadd ent_out (sscreate))))
+  (vl-cmdf "_.PLAN" "_C") ; 切換視圖
+  (vl-cmdf "_.ZOOM" "_Object" ent_out "") ; 強制對焦圖框
 
-  ;; 旋转 270 度
-  (command "_.ROTATE" ss_members "" "non" cen "270")
-  
-  ;; 旋转后重新获取边界框
-  (vla-getboundingbox vla_obj_out 'mpt1 'mpt2)
-  (setq p1_new (vlax-safearray->list mpt1)
-        p2_new (vlax-safearray->list mpt2))
+  ;; 重新獲取旋轉後的 UCS 窗口坐標
+  ;; --- 關鍵修正：將原本的 WCS 點轉換到當前 UCS ---
+  ;; p1_out 和 p2_out 假設是你傳入函數的 WCS 座標點
+  (setq p1_new (trans p1_out 0 1) ; 從 WCS (0) 轉到當前 UCS (1)
+        p2_new (trans p2_out 0 1)
+  ) ; 從 WCS (0) 轉到當前 UCS (1)
 
-  ;; 隐藏外部干扰实体
-  (if (setq ss_all_now (ssget "C" p1_new p2_new))
-    (progn
-      (setq n_idx 0)
-      (repeat (sslength ss_all_now)
-        (setq cur_ent (ssname ss_all_now n_idx)
-              h (cdr (assoc 5 (entget cur_ent))))
-        (if (and (not (member h member_handles)) (/= cur_ent ent_out))
-          (progn (redraw cur_ent 2) (setq hide_list (cons cur_ent hide_list))))
-        (setq n_idx (1+ n_idx)))))
+  ;; ==========================================================
+  ;; 【調試開始】在圖面上畫出打印區域紅框
+  ;; ==========================================================
+  (princ "\n[調試] 正在繪製打印邊界確認框3...")
+  (entmake 
+    (list 
+      '(0 . "LWPOLYLINE")
+      '(100 . "AcDbEntity")
+      '(100 . "AcDbPolyline")
+      '(90 . 4) ; 4個頂點
+      '(70 . 1) ; 閉合
+      '(62 . 1) ; 顏色為紅色
+      (cons 10 (list (car p1_new) (cadr p1_new)))
+      (cons 10 (list (car p2_new) (cadr p1_new)))
+      (cons 10 (list (car p2_new) (cadr p2_new)))
+      (cons 10 (list (car p1_new) (cadr p2_new)))
+    )
+  )
+  (setq debug_rect (entlast)) ; 記錄這個紅框
+  (command "_.REGEN") ; 強制刷新顯示
+  ;; ==========================================================
+  ;; 【調試結束】
+  ;; ==========================================================
 
-  ;; 执行打印
+  ;; 2. 執行列印
   (if (findfile path) (vl-file-delete path))
+
+  (princ 
+    (strcat "\n[執行打印] 窗口點: " 
+            (vl-princ-to-string p1_new)
+            " 至 "
+            (vl-princ-to-string p2_new)
+    )
+  )
   (command "-PLOT" "Y" "" "DWG To PDF.pc3" "ISO full bleed A3 (297.00 x 420.00 毫米)" 
-           "M" "P" "N" "W" "non" p1_new "non" p2_new "F" "C" "Y" "monochrome.ctb" "Y" "A" path "N" "Y")
+           "M" "P" "N" "W" "non" p1_new "non" p2_new "F" "C" "Y" "monochrome.ctb" "Y" "A" path 
+           "N" "Y"
+  )
 
-  ;; 还原
-  (foreach h_item hide_list (redraw h_item 1))
-  (command "_.ROTATE" ss_members "" "non" cen "90")
 
-  (princ (strcat "\n[成功导出] " pdfname))
+  ;; ==========================================================
+  ;; 3. 環境還原
+  ;; ==========================================================
+  (if debug_rect (entdel debug_rect)) ; 如果你想保留紅框檢查，就註釋掉這一行
+  (command "_.UCS" "_W")
+  (command "_.PLAN" "_W")
+
+  (princ (strcat "\n[成功導出] " pdfname))
 )
-
+(defun c:DelOLE (/ ss i ent)
+  (vl-load-com)
+  (princ "\n正在掃描並刪除全局 OLE 圖片...")
+  
+  ;; 使用 ssget "X" 進行全局搜索，過濾條件為 OLE2FRAME
+  (if (setq ss (ssget "X" '((0 . "OLE2FRAME"))))
+    (progn
+      (setq i 0)
+      (repeat (sslength ss)
+        (setq ent (ssname ss i))
+        (entdel ent) ; 執行刪除
+        (setq i (1+ i))
+      )
+      (princ (strcat "\n[成功] 已刪除 " (itoa i) " 個 OLE 物件。"))
+    )
+    (princ "\n[提示] 圖檔中未發現 OLE 物件。")
+  )
+  (command "_.REGEN") ; 刷新顯示
+  (princ)
+)
+(princ)
 ;; ==========================================================
 ;; 8. BEXK 命令 - 框选上传（保留原有逻辑）
 ;; ==========================================================
@@ -419,7 +462,107 @@
   )
   (princ)
 )
+(defun c:SignBatch (/ userProfile desktopPath files pt1 pt2 w h center_rect vlaImg 
+                    min_ext max_ext cur_w cur_h scale_final img_center target_center 
+                    fullPath imgEnt i fileName min_list max_list
+                   ) 
+  (vl-load-com)
+  (setvar "CMDECHO" 0)
+  ;;全局關閉圖片邊框打印
+  (setvar "IMAGEFRAME" 2)
+   ;; 1. 获取桌面路径
+  (setq userProfile (getenv "USERPROFILE"))
+  (setq picPath (strcat userProfile "\\Desktop\\签名"))
+  ;; (setq picPath "\\\\192.168.1.100\\SJWH\\签名")
+  ;; 定义文件名（请确保桌面文件名准确）
+  (setq files '("设计签名.png" "校对签名.png" "审核签名.png"))
 
+  ;; 2. 选取第一个矩形框（设计签名）
+  (initget 1)
+  (setq pt1 (getpoint "\n指定[设计签名]矩形左上角: "))
+  (initget 1)
+  (setq pt2 (getcorner pt1 "\n指定[设计签名]矩形右下角: "))
+
+  ;; 计算基础宽、高及中心点
+  (setq w (abs (- (car pt1) (car pt2))))
+  (setq h (abs (- (cadr pt1) (cadr pt2))))
+  (setq center_rect (list (/ (+ (car pt1) (car pt2)) 2.0) 
+                          (/ (+ (cadr pt1) (cadr pt2)) 2.0)
+                          0.0
+                    )
+  )
+
+  ;; 3. 循环插入
+  (setq i 0)
+  (foreach fileName files 
+    (setq fullPath (strcat picPath "\\" fileName))
+
+    (if (findfile fullPath) 
+      (progn 
+        ;; 计算当前签名的目标位置（向下等距偏移）
+        (setq target_center (list (car center_rect) 
+                                  (- (cadr center_rect) (* i h))
+                                  0.0
+                            )
+        )
+
+        ;; A. 插入图片
+        (setvar "FILEDIA" 0)
+        (command "_-IMAGE" "_Attach" fullPath (list 0 0 0) "1" "0")
+        (setq imgEnt (entlast))
+        (setvar "FILEDIA" 1)
+
+        ;; B. 测量尺寸
+        (setq vlaImg (vlax-ename->vla-object imgEnt))
+        (vla-update vlaImg)
+        (vla-getboundingbox vlaImg 'min_ext 'max_ext)
+
+        ;; 将 safearray 转换为普通 list
+        (setq min_list (vlax-safearray->list min_ext))
+        (setq max_list (vlax-safearray->list max_ext))
+
+        (setq cur_w (- (car max_list) (car min_list)))
+        (setq cur_h (- (cadr max_list) (cadr min_list)))
+
+        ;; C. 计算比例 (宽度100%填充，高度防溢出)
+        (setq scale_final (/ w cur_w))
+        (if (> (* cur_h scale_final) h) 
+          (setq scale_final (/ h cur_h))
+        )
+
+        ;; D. 缩放
+        (vla-ScaleEntity vlaImg (vlax-3d-point (list 0 0 0)) scale_final)
+
+        ;; E. 精确居中移动
+        ;; 重新获取缩放后的中心点
+        (vla-getboundingbox vlaImg 'min_ext 'max_ext)
+        (setq min_list (vlax-safearray->list min_ext))
+        (setq max_list (vlax-safearray->list max_ext))
+
+        (setq img_center (vlax-3d-point 
+                           (/ (+ (car min_list) (car max_list)) 2.0)
+                           (/ (+ (cadr min_list) (cadr max_list)) 2.0)
+                           0.0
+                         )
+        )
+
+        (vla-Move vlaImg img_center (vlax-3d-point target_center))
+
+        ;; F. 开启透明
+        (vla-put-Transparency vlaImg :vlax-true)
+        (princ (strcat "\n已完成: " fileName))
+      )
+      (princ (strcat "\n跳过（未找到文件）: " fileName))
+    )
+    (setq i (1+ i)) ; 递增索引，控制垂直位置
+  )
+
+  (setvar "CMDECHO" 1)
+  (princ "\n批量插入任务结束。")
+  (princ)
+)
+
+(princ "\n加载成功。输入 SignBatch 批量插入三个签名。")
 ;; ==========================================================
 ;; 4. GTA 命令 - 提取数据并导出带 ZOOM 命令的 TXT
 ;; ==========================================================
@@ -640,15 +783,7 @@
   )
   (princ)
 )
-;; ==========================================================
-;; 加载提示
-;; ==========================================================
-(princ "\n--- ESA 命令加载成功：输入 ESA 执行全图自动批量导出 PDF ---")
-(princ "\n--- BEXK 命令加载成功：框选提取数据 ---")
-(princ "\n--- GTA 命令 - 提取数据并导出为 TXT ---")
-(princ "\n--- EXK 命令加载成功：全图扫描并上传 ---")
-(princ "\n--- CA命令加载成功：全图复制剪切板文件名 ---")
-(princ "\n--- BPA命令加载成功：全图打印图纸到打印机 ---")
+
 ;; 热更新快捷键
 (setq _current_lsp_path "C:/Users/19746/Desktop/node/extract_data.lsp") 
 (defun c:EAD ()
@@ -657,98 +792,7 @@
   (princ)
 )
 ;; ==========================================================
-;; 15. BPA 命令 - 修复版 (解决 lentityp nil 错误)
-;; ==========================================================
-(defun c:BPA (/ ss_all i ent_out ed_out vlist_out p1_out p2_out out_area 
-               ss_inner k obj_in in_ed in_vlist in_min in_max in_area ratio 
-               printer_name count)
-  
-  (vl-load-com)
-  (setq old_cmdecho (getvar "CMDECHO") 
-        old_osmode (getvar "OSMODE"))
-  (setvar "CMDECHO" 0) 
-  (setvar "OSMODE" 0)
-
-  ;; 1. 设定物理打印机名称 (请确保这里是你二号机的真实驱动名)
-  (setq printer_name "二号机打印机名称.pc3") 
-  (setq count 0)
-
-  (princ "\n[系统] 正在按 ESA 嵌套逻辑扫描外框...")
-
-  ;; 2. 扫描全图所有闭合多段线
-  (if (setq ss_all (ssget "X" '((0 . "LWPOLYLINE") (70 . 1)))) 
-    (progn 
-      (setq i 0)
-      (repeat (sslength ss_all) 
-        (setq ent_out (ssname ss_all i))
-        (if (and ent_out (entget ent_out)) ; 确保实体存在
-          (progn
-            (setq ed_out (entget ent_out)
-                  vlist_out (mapcar 'cdr (vl-remove-if-not '(lambda (x) (= 10 (car x))) ed_out))
-                  p1_out (list (apply 'min (mapcar 'car vlist_out)) (apply 'min (mapcar 'cadr vlist_out)))
-                  p2_out (list (apply 'max (mapcar 'car vlist_out)) (apply 'max (mapcar 'cadr vlist_out)))
-                  out_area (abs (* (- (car p2_out) (car p1_out)) (- (cadr p2_out) (cadr p1_out)))))
-
-            ;; 过滤外框面积 (A4约 6e4, A3约 1.2e5, 这里你的 1e6 是针对大图的)
-            (if (and (> out_area 1000000.0) (< out_area 400000000.0))
-              (progn
-                ;; 3. 在外框范围内寻找内框
-                (if (setq ss_inner (ssget "C" p1_out p2_out '((0 . "LWPOLYLINE") (70 . 1))))
-                  (progn
-                    (setq k 0)
-                    (repeat (sslength ss_inner)
-                      (setq obj_in (ssname ss_inner k))
-                      (if (and obj_in (not (equal obj_in ent_out))) ; 确保内框不是外框本身
-                        (progn
-                          (setq in_ed (entget obj_in)
-                                in_vlist (mapcar 'cdr (vl-remove-if-not '(lambda (x) (= 10 (car x))) in_ed))
-                                in_min (list (apply 'min (mapcar 'car in_vlist)) (apply 'min (mapcar 'cadr in_vlist)))
-                                in_max (list (apply 'max (mapcar 'car in_vlist)) (apply 'max (mapcar 'cadr in_vlist)))
-                                in_area (abs (* (- (car in_max) (car in_min)) (- (cadr in_max) (cadr in_min))))
-                                ratio (/ in_area out_area))
-
-                          ;; 4. 判定比例
-                          (if (and (> ratio 0.85) (< ratio 0.98))
-                            (progn
-                              ;; 检查 draw_debug_rect 是否存在，若报错则临时定义一个
-                              (if (and p1_out p2_out)
-                                (progn
-                                  ;; 模拟 ESA 的调试框绘制
-                                  (entmake (list '(0 . "LINE") '(62 . 1) (cons 10 p1_out) (cons 11 (list (car p2_out) (cadr p1_out)))))
-                                  (entmake (list '(0 . "LINE") '(62 . 1) (cons 10 p1_out) (cons 11 (list (car p1_out) (cadr p2_out)))))
-                                  (princ (strcat "\n[打印中] 发现标准图框，发送至: " printer_name))
-                                  
-                                  ;; (command "-PLOT" "Y" "" printer_name 
-                                  ;;          "ISO full bleed A3 (297.00 x 420.00 毫米)" 
-                                  ;;          "M" "L" "N" "W" "non" p1_out "non" p2_out "F" "C" "Y" 
-                                  ;;          "monochrome.ctb" "Y" "N" "N" "Y")
-                                  
-                                  (setq count (1+ count))
-                                  (setq k (sslength ss_inner)) ; 跳出内循环
-                                ))
-                            )
-                          )
-                        ))
-                      (setq k (1+ k))
-                    )
-                  )
-                )
-              )
-            )
-          ))
-        (setq i (1+ i))
-      )
-      (princ (strcat "\n[完成] 共成功打印 " (itoa count) " 张图纸。"))
-    )
-    (princ "\n[错误] 未能在图中找到任何闭合线。")
-  )
-
-  (setvar "CMDECHO" old_cmdecho)
-  (setvar "OSMODE" old_osmode)
-  (princ)
-)
-;; ==========================================================
-;; 16. EJSON 命令 - 全图提取并格式化保存 JSON (修复加载失败版本)
+;; 15. EJSON 命令 - 全图提取并格式化保存 JSON (修复加载失败版本)
 ;; ==========================================================
 (defun c:EJSON (/ desktop json_file dwg_path txt_data final_list new_block 
                  first_item item m_code d_num p_code cur_x cur_y zoom_cmd 
@@ -832,5 +876,63 @@
   )
   (princ)
 )
+(defun c:DeleteAll () (MyQuickDelete nil))    ; 全局一键清理
+(defun c:DeleteSelect () (MyQuickDelete T))   ; 框选清理局部
+
+(defun MyQuickDelete (useSelect / ss filter cnt)
+  (vl-load-com)
+  (princ "\n正在执行全能清理（包含双点划线、细实线、中心线、审核图层等）...")
+  
+  ;; 1. 构建组合过滤器
+  (setq filter 
+    '((-4 . "<OR")
+        (0 . "DIMENSION")         ; 标注
+        (0 . "LEADER,MULTILEADER") ; 引线
+        (0 . "*TEXT")             ; 所有文字
+        ;; --- 图层过滤核心区 ---
+        (8 . "细实线,中心线,双点划线") ; 明确的图层名
+        (8 . "*审核*,*设计*,*校对*,*划线*") ; 模糊匹配包含这些字眼的图层
+        ;; --- 线型过滤兜底 ---
+        (6 . "CENTER*,PHANTOM*,DASHDOT*") ; 匹配中心线、双点划线等线型
+      (-4 . "OR>")
+    )
+  )
+
+  ;; 2. 获取选择集
+  (if useSelect
+    (progn 
+      (princ "\n请框选要清理的区域: ")
+      (setq ss (ssget filter))
+    )
+    (setq ss (ssget "_X" filter)) ; 全局自动扫描
+  )
+
+  ;; 3. 执行删除
+  (if ss
+    (progn
+      (setq cnt (sslength ss))
+      (command "_.erase" ss "")
+      (princ (strcat "\n清理成功！共删除 " (itoa cnt) " 个对象。"))
+    )
+    (princ "\n未发现符合条件的物件。")
+  )
+  
+  (command "_.regen")
+  (princ)
+)
+;; ==========================================================
+;; 加载提示
+;; ==========================================================
+(princ "\n--- ESA 命令加载成功：输入 ESA 执行全图自动批量导出 PDF ---")
+(princ "\n--- BEXK 命令加载成功：框选提取数据 ---")
+(princ "\n--- GTA 命令 - 提取数据并导出为 TXT ---")
+(princ "\n--- EXK 命令加载成功：全图扫描并上传 ---")
+(princ "\n--- CA命令加载成功：全图复制剪切板文件名 ---")
 (princ "\n--- EJSON 命令加载成功：全图生成/追加 JSON 数据到桌面 ---")
+(princ "\n--- SignBatch 命令加载成功：批量插入签名 ---")
+(princ "\n--- DelOLE 命令加载成功：批量删除全局ole签名 ---")
+(princ "\n--- DeleteAll 命令加载成功：批量删除全局标注文字 ---")
+(princ "\n--- DeleteSelect 命令加载成功：框选批量删除全局标注文字 ---")
 (princ "\n--- extract_data.lsp 已优化加载完成 ---")
+
+
