@@ -1,10 +1,11 @@
 import { useEffect, useState, useMemo } from "react";
 import { DataGrid, GridColDef, GridRenderCellParams } from "@mui/x-data-grid";
 import { ThemeProvider, createTheme, Box } from "@mui/material";
-import { Search, X, Calendar, User } from "lucide-react";
+import { Search, X, Calendar, User, RefreshCw } from "lucide-react";
 import { SyncLog } from "@/lib/types";
 import { getElectroView } from "@/lib/rpc";
 import { useAppTheme } from "@/components/ThemeContext";
+import { SelectDropdown } from "./SelectDropdown";
 
 interface LogListProps {
   sourcePath?: string;
@@ -41,22 +42,33 @@ export function LogList({ sourcePath }: LogListProps) {
   const { isDark } = useAppTheme();
   const [logs, setLogs] = useState<SyncLog[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [reasonTypeFilter, setReasonTypeFilter] = useState<string>("all");
   const [dateFilter, setDateFilter] = useState<string>("all");
 
   // 加载日志
-  const loadLogs = async () => {
-    setLoading(true);
+  const loadLogs = async (isRefresh = false) => {
+    if (isRefresh) {
+      setIsRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     try {
       const result = await getElectroView().rpc!.request.getSyncLogs({ sourcePath });
+      console.log(result,'data');
+
       if (result.success && result.logs) {
         setLogs(result.logs);
       }
     } catch (err) {
       console.error("加载日志失败:", err);
     } finally {
-      setLoading(false);
+      if (isRefresh) {
+        setIsRefreshing(false);
+      } else {
+        setLoading(false);
+      }
     }
   };
 
@@ -93,7 +105,6 @@ export function LogList({ sourcePath }: LogListProps) {
           matchesDate = new Date(log.createdAt).getTime() >= weekAgo;
         }
       }
-
       return matchesSearch && matchesReasonType && matchesDate;
     });
   }, [logs, searchQuery, reasonTypeFilter, dateFilter]);
@@ -104,28 +115,34 @@ export function LogList({ sourcePath }: LogListProps) {
         palette: {
           mode: isDark ? "dark" : "light",
           primary: { main: "#3b82f6" },
+          background: {
+            default: isDark ? "#0f172a" : "#ffffff",
+            paper: isDark ? "#1e293b" : "#ffffff",
+          },
         },
         components: {
-          MuiTableCell: {
+          MuiDataGrid: {
             styleOverrides: {
               root: {
-                borderBottom: "1px solid var(--border)",
-                padding: "12px 16px",
-              },
-              head: {
-                backgroundColor: "oklch(0.18 0 0 / 0.5)",
-                borderBottom: "2px solid var(--border)",
-                color: "var(--muted-foreground)",
-              },
-            },
-          },
-          MuiTableContainer: {
-            styleOverrides: {
-              root: {
-                border: "1px solid var(--border)",
+                border: isDark ? "1px solid #1e293b" : "1px solid #e2e8f0",
                 borderRadius: "12px",
-                backgroundColor: "var(--card)",
                 overflow: "hidden",
+                backgroundColor: isDark ? "#0f172a" : "#ffffff",
+              },
+              columnHeader: {
+                color: isDark ? "#cbd5e1" : "#475569",
+                fontWeight: 600,
+                fontSize: "13px",
+              },
+              cell: {
+                borderBottom: isDark ? "1px solid #1e293b" : "1px solid #f1f5f9",
+                color: isDark ? "#e2e8f0" : "#334155",
+                fontSize: "13px",
+              },
+              row: {
+                "&:hover": {
+                  backgroundColor: isDark ? "rgba(59, 130, 246, 0.1)" : "#f8fafc",
+                },
               },
             },
           },
@@ -215,23 +232,10 @@ export function LogList({ sourcePath }: LogListProps) {
 
   const rows = useMemo(() => {
     return filteredLogs.map((log) => ({
-      id: log.id,
       ...log,
+      id: log.id || `${log.createdAt}-${log.fileName}`,
     }));
   }, [filteredLogs]);
-
-  if (loading) {
-    return (
-      <div
-        className={`flex flex-col items-center justify-center rounded-2xl py-20 ${
-          isDark ? "bg-slate-800/30" : "bg-slate-50"
-        }`}
-      >
-        <div className="h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-sm text-slate-500">加载中...</p>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-4">
@@ -262,46 +266,39 @@ export function LogList({ sourcePath }: LogListProps) {
           )}
         </div>
 
-        <select
+        <SelectDropdown
           value={reasonTypeFilter}
-          onChange={(e) => setReasonTypeFilter(e.target.value)}
-          className={`px-3 py-2 rounded-lg border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${
-            isDark
-              ? "bg-slate-800 border-slate-700 text-slate-200"
-              : "bg-white border-slate-200 text-slate-800"
-          }`}
-        >
-          <option value="all">所有原因类型</option>
-          <option value="modify">图纸修改</option>
-          <option value="new">上传新图纸</option>
-          <option value="delete">删除图纸</option>
-          <option value="custom">自定义</option>
-        </select>
+          onChange={(value) => setReasonTypeFilter(value)}
+          options={[
+            { value: "all", label: "所有原因类型" },
+            { value: "modify", label: "图纸修改" },
+            { value: "new", label: "上传新图纸" },
+            { value: "delete", label: "删除图纸" },
+            { value: "custom", label: "自定义" },
+          ]}
+        />
 
-        <select
+        <SelectDropdown
           value={dateFilter}
-          onChange={(e) => setDateFilter(e.target.value)}
-          className={`px-3 py-2 rounded-lg border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${
-            isDark
-              ? "bg-slate-800 border-slate-700 text-slate-200"
-              : "bg-white border-slate-200 text-slate-800"
-          }`}
-        >
-          <option value="all">所有时间</option>
-          <option value="today">今天</option>
-          <option value="yesterday">昨天</option>
-          <option value="week">本周</option>
-        </select>
+          onChange={(value) => setDateFilter(value)}
+          options={[
+            { value: "all", label: "所有时间" },
+            { value: "today", label: "今天" },
+            { value: "yesterday", label: "昨天" },
+            { value: "week", label: "本周" },
+          ]}
+        />
 
         <button
-          onClick={loadLogs}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+          onClick={() => loadLogs(true)}
+          disabled={isRefreshing}
+          className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
             isDark
               ? "bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
               : "bg-blue-50 text-blue-600 hover:bg-blue-100"
           }`}
         >
-          刷新
+          <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
         </button>
       </div>
 
@@ -319,7 +316,7 @@ export function LogList({ sourcePath }: LogListProps) {
         <ThemeProvider theme={theme}>
           <Box
             sx={{
-              height: "calc(100vh - 260px)",
+              height: "calc(100vh - 320px)",
               width: "100%",
               bgcolor: "background.paper",
               borderRadius: "16px",

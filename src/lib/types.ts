@@ -165,6 +165,14 @@ export type DrawingRPC = {
         params: { sourcePath: string };
         response: { success: boolean };
       };
+      startWatchingLocalDirectory: {
+        params: { sourcePath: string; localPath: string };
+        response: { success: boolean; error?: string };
+      };
+      stopWatchingLocalDirectory: {
+        params: { localPath: string };
+        response: { success: boolean };
+      };
       saveSyncLog: {
         params: Omit<SyncLog, "id" | "createdAt" | "createdBy">;
         response: { success: boolean; error?: string };

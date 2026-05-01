@@ -1,14 +1,13 @@
-import { useEffect, useMemo, useState, useCallback, useRef } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useMemo, useState, useCallback, } from "react";
 import { DataGrid, GridColDef, GridRenderCellParams } from "@mui/x-data-grid";
-import { ThemeProvider, createTheme, Box } from "@mui/material";
-import { FileText, Folder, FolderOpen, Search, ChevronDown, Download, Upload, X } from "lucide-react";
+import { ThemeProvider, createTheme, Box, Modal, Typography, TextField, Button } from "@mui/material";
+import { FileText, Folder, FolderOpen, Search, Download, Upload, X, RefreshCw } from "lucide-react";
 import { FileInfo, SyncReasonType } from "@/lib/types";
 import { eventBus, getElectroView } from "@/lib/rpc";
 import { useAppTheme } from "@/components/ThemeContext";
 import { useToast } from "../useToast";
 import { readCadConfig } from "@/lib/utils";
-
+import { SelectDropdown } from "./SelectDropdown";
 interface FileListProps {
   searchQuery: string;
   sourcePath?: string;
@@ -99,10 +98,10 @@ interface SyncReasonModalProps {
   fileName: string;
   onClose: () => void;
   onConfirm: (reasonType: SyncReasonType, reason: string) => void;
-  isDark: boolean;
 }
 
-function SyncReasonModal({ isOpen, fileName, onClose, onConfirm, isDark }: SyncReasonModalProps) {
+function SyncReasonModal({ isOpen, fileName, onClose, onConfirm }: SyncReasonModalProps) {
+  const { isDark } = useAppTheme();
   const [selectedReasonType, setSelectedReasonType] = useState<SyncReasonType>("modify");
   const [customReason, setCustomReason] = useState("");
 
@@ -118,88 +117,164 @@ function SyncReasonModal({ isOpen, fileName, onClose, onConfirm, isDark }: SyncR
     onConfirm(selectedReasonType, reason);
   };
 
-  if (!isOpen) return null;
-
-  return createPortal(
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className={`rounded-xl shadow-xl w-full max-w-md ${isDark ? "bg-slate-800 text-slate-100" : "bg-white text-slate-900"}`}>
-        <div className="flex items-center justify-between p-4 border-b border-current/10">
-          <h3 className="text-lg font-semibold">同步原因</h3>
-          <button onClick={onClose} className="p-1 rounded hover:bg-current/10">
+  return (
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Box sx={{
+        bgcolor: isDark ? '#1e293b' : '#ffffff',
+        borderRadius: '12px',
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+        width: '100%',
+        maxWidth: 440,
+        outline: 'none',
+        p: 0,
+      }}>
+        <Box sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          p: 2,
+          borderBottom: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
+        }}>
+          <Typography variant="h6" component="h3" sx={{ fontWeight: 600, color: isDark ? '#e2e8f0' : '#1e293b' }}>
+            同步原因
+          </Typography>
+          <Button
+            onClick={onClose}
+            sx={{ minWidth: 'auto', p: 0.5, borderRadius: 1, color: isDark ? '#94a3b8' : '#64748b' }}
+          >
             <X className="h-5 w-5" />
-          </button>
-        </div>
+          </Button>
+        </Box>
 
-        <div className="p-4 space-y-4">
-          <p className="text-sm text-muted-foreground">
-            正在同步文件: <span className="font-medium">{fileName}</span>
-          </p>
+        <Box sx={{ p: 2 }}>
+          <Typography variant="body2" sx={{ mb: 2, color: isDark ? '#94a3b8' : '#64748b' }}>
+            正在同步文件: <Box component="span" sx={{ fontWeight: 500, color: isDark ? '#e2e8f0' : '#1e293b' }}>{fileName}</Box>
+          </Typography>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">请选择同步原因:</label>
-            <div className="space-y-2">
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="body2" sx={{ mb: 1, fontWeight: 500, color: isDark ? '#e2e8f0' : '#1e293b' }}>
+              请选择同步原因:
+            </Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
               {reasonOptions.map((option) => (
-                <label
+                <Box
                   key={option.value}
-                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selectedReasonType === option.value
-                    ? isDark
-                      ? "bg-blue-500/20 border-blue-500/30"
-                      : "bg-blue-50 border-blue-200"
-                    : isDark
-                      ? "border-slate-600 hover:bg-slate-700/50"
-                      : "border-slate-200 hover:bg-slate-50"
-                    }`}
+                  onClick={() => setSelectedReasonType(option.value)}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.5,
+                    p: 1.5,
+                    borderRadius: 1,
+                    border: 1,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    borderColor: selectedReasonType === option.value
+                      ? '#3b82f6'
+                      : isDark ? '#334155' : '#e2e8f0',
+                    bgcolor: selectedReasonType === option.value
+                      ? '#3b82f6'
+                      : 'transparent',
+                    color: selectedReasonType === option.value
+                      ? 'white'
+                      : isDark ? '#e2e8f0' : '#1e293b',
+                    '&:hover': {
+                      bgcolor: selectedReasonType === option.value
+                        ? '#2563eb'
+                        : isDark ? '#334155' : '#f1f5f9',
+                    },
+                  }}
                 >
-                  <input
+                  <Box
+                    component="input"
                     type="radio"
-                    name="syncReason"
-                    value={option.value}
                     checked={selectedReasonType === option.value}
                     onChange={() => setSelectedReasonType(option.value)}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500/50"
+                    sx={{
+                      width: 16,
+                      height: 16,
+                      accentColor: selectedReasonType === option.value ? 'white' : '#3b82f6',
+                    }}
                   />
-                  <span className="font-medium">{option.label}</span>
-                </label>
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    {option.label}
+                  </Typography>
+                </Box>
               ))}
-            </div>
-          </div>
+            </Box>
+          </Box>
 
           {selectedReasonType === "custom" && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium">请输入自定义原因:</label>
-              <textarea
-                value={customReason}
-                onChange={(e) => setCustomReason(e.target.value)}
-                placeholder="请输入同步原因..."
-                className={`w-full rounded-lg border p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${isDark
-                  ? "bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-500"
-                  : "bg-white border-slate-200 text-slate-800 placeholder:text-slate-400"
-                  }`}
-                rows={3}
-              />
-            </div>
+            <TextField
+              fullWidth
+              multiline
+              rows={3}
+              placeholder="请输入同步原因..."
+              value={customReason}
+              onChange={(e) => setCustomReason(e.target.value)}
+              sx={{
+                mt: 1,
+                '& .MuiOutlinedInput-root': {
+                  bgcolor: isDark ? '#0f172a' : '#f8fafc',
+                  '& fieldset': {
+                    borderColor: isDark ? '#334155' : '#e2e8f0',
+                  },
+                },
+                '& .MuiInputBase-input': {
+                  color: isDark ? '#e2e8f0' : '#1e293b',
+                },
+                '& .MuiInputBase-input::placeholder': {
+                  color: isDark ? '#64748b' : '#94a3b8',
+                },
+              }}
+            />
           )}
-        </div>
+        </Box>
 
-        <div className="flex items-center justify-end gap-2 p-4 border-t border-current/10">
-          <button
+        <Box sx={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: 1,
+          p: 2,
+          borderTop: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
+        }}>
+          <Button
+            variant="outlined"
             onClick={onClose}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-slate-700 hover:bg-slate-600" : "bg-slate-100 hover:bg-slate-200"
-              }`}
+            sx={{ 
+              color: isDark ? '#e2e8f0' : '#1e293b',
+              borderColor: isDark ? '#334155' : '#e2e8f0',
+              '&:hover': {
+                bgcolor: isDark ? '#334155' : '#f1f5f9',
+                borderColor: isDark ? '#475569' : '#cbd5e1',
+              },
+            }}
           >
             取消
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="contained"
             onClick={handleConfirm}
             disabled={selectedReasonType === "custom" && !customReason.trim()}
-            className="px-4 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 font-medium transition-colors"
+            sx={{ 
+              bgcolor: '#3b82f6',
+              '&:hover': { bgcolor: '#2563eb' },
+              '&:disabled': { bgcolor: '#64748b', cursor: 'not-allowed' },
+            }}
           >
             确认同步
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body
+          </Button>
+        </Box>
+      </Box>
+    </Modal>
   );
 }
 
@@ -210,11 +285,12 @@ export function FileList({ searchQuery, sourcePath: propSourcePath, onSourcePath
   const [loading, setLoading] = useState(false);
   const [sourcePath, setSourcePath] = useState<string>(propSourcePath || localStorage.getItem("sourcePath") || "");
   const [localPath, setLocalPath] = useState<string>(localStorage.getItem("localPath") || "");
-  const [selectedFileType, setSelectedFileType] = useState<FileType>("all");
-  const [isTypeDropdownOpen, setIsTypeDropdownOpen] = useState(false);
+  const [selectedFileType, setSelectedFileType] = useState<FileType>('dwg');
   const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
   const [cloneSelectedTypes, setCloneSelectedTypes] = useState<FileType[]>(["all"]);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
+  const [autoUploadEnabled, setAutoUploadEnabled] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [updatingFiles, setUpdatingFiles] = useState<Set<string>>(new Set());
   const [syncingFiles, setSyncingFiles] = useState<Set<string>>(new Set());
   const [syncReasonModal, setSyncReasonModal] = useState<{
@@ -241,8 +317,12 @@ export function FileList({ searchQuery, sourcePath: propSourcePath, onSourcePath
     }
   }, [sourcePath, localPath, onSourcePathChange]);
 
-  const loadDirectory = useCallback(async (path: string) => {
-    setLoading(true);
+  const loadDirectory = useCallback(async (path: string, isRefresh = false) => {
+    if (isRefresh) {
+      setIsRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     try {
       const result = await getElectroView().rpc!.request.listDirectory({ path, sourcePath });
       if (result.success && result.files) {
@@ -259,7 +339,11 @@ export function FileList({ searchQuery, sourcePath: propSourcePath, onSourcePath
       console.error("加载目录失败:", err);
       showToast("读取目录失败", "error");
     } finally {
-      setLoading(false);
+      if (isRefresh) {
+        setIsRefreshing(false);
+      } else {
+        setLoading(false);
+      }
     }
   }, [showToast, sourcePath]);
 
@@ -271,8 +355,12 @@ export function FileList({ searchQuery, sourcePath: propSourcePath, onSourcePath
   }, [localPath, loadDirectory]);
 
   // 文件变更回调
-  const handleFileChange = (data: { fileName: string }) => {
-    handleUpdateFile(data.fileName);
+  const handleFileChange = (data: { fileName: string; isLocalChange?: boolean }) => {
+    if (data.isLocalChange) {
+      handleSyncFileWithReason(data.fileName);
+    } else {
+      handleUpdateFile(data.fileName);
+    }
   }
   // 启动监听
   const startWatching = async () => {
@@ -305,14 +393,48 @@ export function FileList({ searchQuery, sourcePath: propSourcePath, onSourcePath
         console.error("停止监听失败:", err);
       });
   }
-  // 监听源目录文件变化
+  // 启动监听本地目录
+  const startLocalWatching = async () => {
+    try {
+      const result = await getElectroView().rpc!.request.startWatchingLocalDirectory({
+        sourcePath,
+        localPath
+      });
+      eventBus.on('fileChanged', handleFileChange);
+      if (result.success) {
+        console.log(`成功启动对本地目录 ${localPath} 的监听`);
+        showToast("已启动自动上传监听，本地文件变更将自动同步到共享盘", "success");
+      } else {
+        showToast(result.error || "启动监听失败", "error");
+      }
+    } catch (err) {
+      console.error("启动监听失败:", err);
+      showToast("启动监听失败", "error");
+    }
+  };
+  const stopLocalWathing = () => {
+    getElectroView().rpc!.request.stopWatchingLocalDirectory({ localPath })
+      .then(result => {
+        if (result.success) {
+          console.log(`已停止对本地目录 ${localPath} 的监听`);
+          eventBus.off('fileChanged', handleFileChange);
+        }
+      })
+      .catch(err => {
+        console.error("停止监听失败:", err);
+      });
+  }
+  // 监听源目录文件变化（自动更新同步）
   useEffect(() => {
     if (!sourcePath || !localPath) {
       return;
     }
+    if (autoUploadEnabled && autoSyncEnabled) {
+      setAutoSyncEnabled(false);
+      return;
+    }
     if (autoSyncEnabled) {
-      startWatching();
-
+      startWatching()
     } else {
       stopWathing();
     }
@@ -324,6 +446,28 @@ export function FileList({ searchQuery, sourcePath: propSourcePath, onSourcePath
       }
     };
   }, [autoSyncEnabled, sourcePath, localPath]);
+
+  // 监听本地目录文件变化（自动上传同步）
+  useEffect(() => {
+    if (!sourcePath || !localPath) {
+      return;
+    }
+    if (autoSyncEnabled && autoUploadEnabled) {
+      setAutoUploadEnabled(false);
+      return;
+    }
+    if (autoUploadEnabled) {
+      startLocalWatching();
+    } else {
+      stopLocalWathing();
+    }
+    // 清理
+    return () => {
+      if (localPath) {
+        stopLocalWathing();
+      }
+    };
+  }, [autoUploadEnabled, sourcePath, localPath]);
 
   const filteredFiles = useMemo(() => {
     return files.filter((file) => {
@@ -523,6 +667,21 @@ export function FileList({ searchQuery, sourcePath: propSourcePath, onSourcePath
     });
   };
 
+  // 自动同步文件（用于监听本地目录变化，无需弹窗）
+  const handleSyncFileWithReason = (fileName: string) => {
+    if (!sourcePath || !localPath) {
+      return;
+    }
+
+    if (syncingFiles.has(fileName)) {
+      return;
+    }
+
+    const reasonType: SyncReasonType = "modify";
+    const reason = "图纸修改";
+    executeSyncFile(fileName, reasonType, reason);
+  };
+
   // 确认同步原因后的处理
   const handleConfirmSyncReason = (reasonType: SyncReasonType, reason: string) => {
     const { fileName, operation } = syncReasonModal;
@@ -575,28 +734,34 @@ export function FileList({ searchQuery, sourcePath: propSourcePath, onSourcePath
         palette: {
           mode: isDark ? "dark" : "light",
           primary: { main: "#3b82f6" },
+          background: {
+            default: isDark ? "#0f172a" : "#ffffff",
+            paper: isDark ? "#1e293b" : "#ffffff",
+          },
         },
         components: {
-          MuiTableCell: {
+          MuiDataGrid: {
             styleOverrides: {
               root: {
-                borderBottom: "1px solid var(--border)",
-                padding: "12px 16px",
-              },
-              head: {
-                backgroundColor: "oklch(0.18 0 0 / 0.5)",
-                borderBottom: "2px solid var(--border)",
-                color: "var(--muted-foreground)",
-              },
-            },
-          },
-          MuiTableContainer: {
-            styleOverrides: {
-              root: {
-                border: "1px solid var(--border)",
+                border: isDark ? "1px solid #1e293b" : "1px solid #e2e8f0",
                 borderRadius: "12px",
-                backgroundColor: "var(--card)",
                 overflow: "hidden",
+                backgroundColor: isDark ? "#0f172a" : "#ffffff",
+              },
+              columnHeader: {
+                color: isDark ? "#cbd5e1" : "#475569",
+                fontWeight: 600,
+                fontSize: "13px",
+              },
+              cell: {
+                borderBottom: isDark ? "1px solid #1e293b" : "1px solid #f1f5f9",
+                color: isDark ? "#e2e8f0" : "#334155",
+                fontSize: "13px",
+              },
+              row: {
+                "&:hover": {
+                  backgroundColor: isDark ? "rgba(59, 130, 246, 0.1)" : "#f8fafc",
+                },
               },
             },
           },
@@ -643,7 +808,7 @@ export function FileList({ searchQuery, sourcePath: propSourcePath, onSourcePath
     },
     {
       field: "createdAt",
-      headerName: "创建日期",
+      headerName: "修改日期",
       width: 160,
       renderCell: (p: GridRenderCellParams) => (
         <span className="text-sm text-slate-500">
@@ -796,22 +961,10 @@ export function FileList({ searchQuery, sourcePath: propSourcePath, onSourcePath
     );
   }
 
-  if (loading) {
-    return (
-      <div
-        className={`flex flex-col items-center justify-center rounded-2xl py-20 ${isDark ? "bg-slate-800/30" : "bg-slate-50"
-          }`}
-      >
-        <div className="h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4" />
-        <p className="text-sm text-slate-500">加载中...</p>
-      </div>
-    );
-  }
-
   return (
     <>
       <div
-        className={`rounded-2xl border overflow-hidden ${isDark ? "bg-slate-900/50 border-slate-800" : "bg-white border-slate-200"
+        className={` rounded-2xl border overflow-hidden ${isDark ? "bg-slate-900/50 border-slate-800" : "bg-white border-slate-200"
           }`}
       >
         <div
@@ -886,10 +1039,30 @@ export function FileList({ searchQuery, sourcePath: propSourcePath, onSourcePath
                   type="checkbox"
                   checked={autoSyncEnabled}
                   onChange={(e) => setAutoSyncEnabled(e.target.checked)}
-                  disabled={!sourcePath || !localPath}
+                  disabled={!sourcePath || !localPath || autoUploadEnabled}
                   className="h-3 w-3 rounded border-current/30 text-green-600 focus:ring-green-500/50"
                 />
-                <span>{autoSyncEnabled ? "监听中" : "自动同步更新"}</span>
+                <span>{autoSyncEnabled ? "监听中(更新)" : "自动同步更新"}</span>
+              </label>
+              <label
+                className={`flex items-center gap-2 px-2 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${autoUploadEnabled
+                  ? isDark
+                    ? "bg-blue-500/20 text-blue-400"
+                    : "bg-blue-50 text-blue-600"
+                  : isDark
+                    ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                title="自动上传（监听本地目录文件变更并自动同步到共享盘）"
+              >
+                <input
+                  type="checkbox"
+                  checked={autoUploadEnabled}
+                  onChange={(e) => setAutoUploadEnabled(e.target.checked)}
+                  disabled={!sourcePath || !localPath || autoSyncEnabled}
+                  className="h-3 w-3 rounded border-current/30 text-blue-600 focus:ring-blue-500/50"
+                />
+                <span>{autoUploadEnabled ? "监听中(上传)" : "自动上传同步"}</span>
               </label>
               {syncStatusSummary && (
                 <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${syncStatusSummary.modified > 0
@@ -903,95 +1076,29 @@ export function FileList({ searchQuery, sourcePath: propSourcePath, onSourcePath
             </div>
 
             <div className="flex items-center gap-2">
-              <div className="relative">
-                <button
-                  onClick={() => setIsTypeDropdownOpen(!isTypeDropdownOpen)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${isDark
-                    ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                    : "bg-slate-200 text-slate-600 hover:bg-slate-300"
-                    }`}
-                >
-                  <span>{selectedFileType === "all" ? "全部类型" : selectedFileType === "excel" ? "Excel" : selectedFileType === "dwg" ? "DWG" : selectedFileType === "ppt" ? "PowerPoint" : selectedFileType === "pdf" ? "PDF" : selectedFileType === "image" ? "图片" : "Word"}</span>
-                  <ChevronDown className={`h-3 w-3 transition-transform ${isTypeDropdownOpen ? "rotate-180" : ""}`} />
-                </button>
-                {isTypeDropdownOpen && (
-                  <div className={`absolute right-0 top-full z-10 mt-1 overflow-hidden rounded-lg shadow-lg border ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
-                    }`}>
-                    <button
-                      onClick={() => { setSelectedFileType("all"); setIsTypeDropdownOpen(false); }}
-                      className={`w-full px-4 py-2 text-left text-xs transition-colors ${selectedFileType === "all"
-                        ? isDark ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600"
-                        : isDark ? "text-slate-300 hover:bg-slate-700" : "text-slate-700 hover:bg-slate-50"
-                        }`}
-                    >
-                      全部类型
-                    </button>
-                    <button
-                      onClick={() => { setSelectedFileType("dwg"); setIsTypeDropdownOpen(false); }}
-                      className={`w-full px-4 py-2 text-left text-xs transition-colors ${selectedFileType === "dwg"
-                        ? isDark ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600"
-                        : isDark ? "text-slate-300 hover:bg-slate-700" : "text-slate-700 hover:bg-slate-50"
-                        }`}
-                    >
-                      DWG (.dwg, .dxf)
-                    </button>
-                    <button
-                      onClick={() => { setSelectedFileType("excel"); setIsTypeDropdownOpen(false); }}
-                      className={`w-full px-4 py-2 text-left text-xs transition-colors ${selectedFileType === "excel"
-                        ? isDark ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600"
-                        : isDark ? "text-slate-300 hover:bg-slate-700" : "text-slate-700 hover:bg-slate-50"
-                        }`}
-                    >
-                      Excel (.xls, .xlsx)
-                    </button>
-                    <button
-                      onClick={() => { setSelectedFileType("word"); setIsTypeDropdownOpen(false); }}
-                      className={`w-full px-4 py-2 text-left text-xs transition-colors ${selectedFileType === "word"
-                        ? isDark ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600"
-                        : isDark ? "text-slate-300 hover:bg-slate-700" : "text-slate-700 hover:bg-slate-50"
-                        }`}
-                    >
-                      Word (.doc, .docx)
-                    </button>
-                    <button
-                      onClick={() => { setSelectedFileType("ppt"); setIsTypeDropdownOpen(false); }}
-                      className={`w-full px-4 py-2 text-left text-xs transition-colors ${selectedFileType === "ppt"
-                        ? isDark ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600"
-                        : isDark ? "text-slate-300 hover:bg-slate-700" : "text-slate-700 hover:bg-slate-50"
-                        }`}
-                    >
-                      PowerPoint (.ppt, .pptx)
-                    </button>
-                    <button
-                      onClick={() => { setSelectedFileType("pdf"); setIsTypeDropdownOpen(false); }}
-                      className={`w-full px-4 py-2 text-left text-xs transition-colors ${selectedFileType === "pdf"
-                        ? isDark ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600"
-                        : isDark ? "text-slate-300 hover:bg-slate-700" : "text-slate-700 hover:bg-slate-50"
-                        }`}
-                    >
-                      PDF (.pdf)
-                    </button>
-                    <button
-                      onClick={() => { setSelectedFileType("image"); setIsTypeDropdownOpen(false); }}
-                      className={`w-full px-4 py-2 text-left text-xs transition-colors ${selectedFileType === "image"
-                        ? isDark ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600"
-                        : isDark ? "text-slate-300 hover:bg-slate-700" : "text-slate-700 hover:bg-slate-50"
-                        }`}
-                    >
-                      图片 (.jpg, .png, 等)
-                    </button>
-                  </div>
-                )}
-              </div>
+              <SelectDropdown
+                value={selectedFileType}
+                onChange={(value) => setSelectedFileType(value as any)}
+                options={[
+                  { value: "all", label: "全部类型" },
+                  { value: "dwg", label: "DWG (.dwg, .dxf)" },
+                  { value: "excel", label: "Excel (.xls, .xlsx)" },
+                  { value: "word", label: "Word (.doc, .docx)" },
+                  { value: "ppt", label: "PowerPoint (.ppt, .pptx)" },
+                  { value: "pdf", label: "PDF (.pdf)" },
+                  { value: "image", label: "图片 (.jpg, .png, 等)" },
+                ]}
+              />
 
               <button
-                onClick={() => loadDirectory(localPath)}
+                onClick={() => loadDirectory(localPath, true)}
+                disabled={isRefreshing}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${isDark
                   ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/20"
                   : "bg-blue-50 text-blue-600 hover:bg-blue-100"
                   }`}
               >
-                刷新
+                <RefreshCw className={`h-3 w-3 ${isRefreshing ? "animate-spin" : ""}`} />
               </button>
             </div>
           </div>
@@ -1008,11 +1115,12 @@ export function FileList({ searchQuery, sourcePath: propSourcePath, onSourcePath
           <ThemeProvider theme={theme}>
             <Box
               sx={{
-                height: "calc(100vh - 260px)",
+                height: "calc(100vh - 320px)",
                 width: "100%",
                 bgcolor: "background.paper",
                 borderRadius: "16px",
                 overflow: "hidden",
+                marginTop: "8px",
               }}
             >
               <DataGrid
@@ -1057,84 +1165,139 @@ export function FileList({ searchQuery, sourcePath: propSourcePath, onSourcePath
 
         <ToastComponent />
       </div>
-      {isCloneModalOpen && createPortal(
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className={`rounded-xl shadow-xl w-full max-w-md ${isDark ? "bg-slate-800 text-slate-100" : "bg-white text-slate-900"
-            }`}>
-            <div className="flex items-center justify-between p-4 border-b border-current/10">
-              <h3 className="text-lg font-semibold">克隆源目录到本地</h3>
-              <button
-                onClick={() => setIsCloneModalOpen(false)}
-                className="p-1 rounded hover:bg-current/10"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+      <Modal
+        open={isCloneModalOpen}
+        onClose={() => setIsCloneModalOpen(false)}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Box sx={{
+          bgcolor: isDark ? '#1e293b' : '#ffffff',
+          borderRadius: '12px',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+          width: '100%',
+          maxWidth: 440,
+          outline: 'none',
+          p: 0,
+        }}>
+          <Box sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            p: 2,
+            borderBottom: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
+          }}>
+            <Typography variant="h6" component="h3" sx={{ fontWeight: 600, color: isDark ? '#e2e8f0' : '#1e293b' }}>
+              克隆源目录到本地
+            </Typography>
+            <Button
+              onClick={() => setIsCloneModalOpen(false)}
+              sx={{ minWidth: 'auto', p: 0.5, borderRadius: 1, color: isDark ? '#94a3b8' : '#64748b' }}
+            >
+              <X className="h-5 w-5" />
+            </Button>
+          </Box>
 
-            <div className="p-4 space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">选择要克隆的文件类型：</label>
-                <div className="space-y-2">
-                  {CLONE_TYPE_OPTIONS.map((option) => {
-                    const isSelected = cloneSelectedTypes.includes(option.id);
-                    const isAllSelected = cloneSelectedTypes.includes("all");
+          <Box sx={{ p: 2 }}>
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="body2" sx={{ mb: 1, fontWeight: 500, color: isDark ? '#e2e8f0' : '#1e293b' }}>
+                选择要克隆的文件类型：
+              </Typography>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {CLONE_TYPE_OPTIONS.map((option) => {
+                  const isSelected = cloneSelectedTypes.includes(option.id);
+                  const isAllSelected = cloneSelectedTypes.includes("all");
 
-                    return (
-                      <label
-                        key={option.id}
-                        className={`flex items-center gap-3 p-2 rounded-lg border cursor-pointer transition-colors ${isSelected
-                          ? isDark
-                            ? "bg-blue-500/20 border-blue-500/30"
-                            : "bg-blue-50 border-blue-200"
-                          : isDark
-                            ? "border-slate-600 hover:bg-slate-700/50"
-                            : "border-slate-200 hover:bg-slate-50"
-                          } ${option.id !== "all" && isAllSelected ? "opacity-50" : ""
-                          }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => toggleCloneType(option.id)}
-                          className="h-4 w-4 rounded border-current/30 text-blue-600 focus:ring-blue-500/50"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm">{option.label}</div>
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
+                  return (
+                    <Box
+                      key={option.id}
+                      onClick={() => toggleCloneType(option.id)}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1.5,
+                        p: 1.5,
+                        borderRadius: 1,
+                        border: 1,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        opacity: option.id !== "all" && isAllSelected ? 0.5 : 1,
+                        borderColor: isSelected ? '#3b82f6' : isDark ? '#334155' : '#e2e8f0',
+                        bgcolor: isSelected ? '#3b82f6' : 'transparent',
+                        color: isSelected ? 'white' : isDark ? '#e2e8f0' : '#1e293b',
+                        '&:hover': {
+                          bgcolor: isSelected ? '#2563eb' : isDark ? '#334155' : '#f1f5f9',
+                        },
+                      }}
+                    >
+                      <Box
+                        component="input"
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleCloneType(option.id)}
+                        sx={{
+                          width: 16,
+                          height: 16,
+                          accentColor: '#3b82f6',
+                        }}
+                      />
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                          {option.label}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  );
+                })}
+              </Box>
+            </Box>
+          </Box>
 
-            <div className="flex items-center justify-end gap-2 p-4 border-t border-current/10">
-              <button
-                onClick={() => setIsCloneModalOpen(false)}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-slate-700 hover:bg-slate-600" : "bg-slate-100 hover:bg-slate-200"
-                  }`}
-              >
-                取消
-              </button>
-              <button
-                onClick={handleCloneWithFilter}
-                disabled={loading || cloneSelectedTypes.length === 0}
-                className="px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 font-medium transition-colors"
-              >
-                {loading ? "克隆中..." : "开始克隆"}
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+          <Box sx={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: 1,
+            p: 2,
+            borderTop: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
+          }}>
+            <Button
+              variant="outlined"
+              onClick={() => setIsCloneModalOpen(false)}
+              sx={{ 
+                color: isDark ? '#e2e8f0' : '#1e293b',
+                borderColor: isDark ? '#334155' : '#e2e8f0',
+                '&:hover': {
+                  bgcolor: isDark ? '#334155' : '#f1f5f9',
+                  borderColor: isDark ? '#475569' : '#cbd5e1',
+                },
+              }}
+            >
+              取消
+            </Button>
+            <Button
+              variant="contained"
+              onClick={handleCloneWithFilter}
+              disabled={loading || cloneSelectedTypes.length === 0}
+              sx={{ 
+                bgcolor: '#9333ea',
+                '&:hover': { bgcolor: '#7c3aed' },
+                '&:disabled': { bgcolor: '#64748b', cursor: 'not-allowed' },
+              }}
+            >
+              {loading ? "克隆中..." : "开始克隆"}
+            </Button>
+          </Box>
+        </Box>
+      </Modal>
 
       <SyncReasonModal
         isOpen={syncReasonModal.isOpen}
         fileName={syncReasonModal.fileName}
         onClose={() => setSyncReasonModal(prev => ({ ...prev, isOpen: false }))}
         onConfirm={handleConfirmSyncReason}
-        isDark={isDark}
       />
     </>
   );

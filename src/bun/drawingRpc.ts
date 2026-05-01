@@ -178,6 +178,14 @@ export type DrawingRPC = {
         params: { sourcePath: string };
         response: { success: boolean };
       };
+      stopWatchingLocalDirectory: {
+        params: { localPath: string };
+        response: { success: boolean };
+      };
+      startWatchingLocalDirectory: {
+        params: { localPath: string,sourcePath: string };
+        response: { success: boolean; error?: string };
+      };
     };
   }>;
   webview: RPCSchema<{
@@ -197,6 +205,7 @@ interface WatcherInfo {
 }
 
 const activeWatchers: Map<string, WatcherInfo> = new Map();
+const activeLocalWatchers: Map<string, WatcherInfo> = new Map();
 
 // 获取日志文件路径（位于源目录的 .cad-cli/log.json）
 async function getLogFilePath(sourcePath?: string): Promise<string> {
@@ -858,6 +867,8 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
       getSyncLogs: async ({ sourcePath }) => {
         try {
           const logs = await readLogs(sourcePath);
+          console.log(logs);
+          
           return { success: true, logs };
         } catch (error) {
           return {
@@ -985,6 +996,64 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
           return { success: true };
         } catch (error) {
           console.error("停止监听失败:", error);
+          return { success: false };
+        }
+      },
+      startWatchingLocalDirectory: async ({  localPath,sourcePath }) => {
+        try {
+          if (activeLocalWatchers.has(localPath)) {
+            return { success: true };
+          }
+
+          const watcher = watch(
+            localPath,
+            { recursive: true },
+            (eventType, filename) => {
+              if (filename && typeof filename === "string") {
+                if (
+                  filename.endsWith(".dwl") ||
+                  filename.endsWith(".bak") ||
+                  filename.endsWith(".tmp") ||
+                  filename.startsWith("zwTm")
+                ) {
+                  return;
+                }
+
+                console.log(`本地文件 ${filename} 发生 ${eventType}`);
+                if (eventType === "change") {
+                  omitFileChange({ fileName: filename, isLocalChange: true });
+                }
+              }
+            },
+          );
+
+          watcher.on("error", (error) => {
+            console.error(`监听本地目录 ${localPath} 出错:`, error);
+          });
+
+          activeLocalWatchers.set(localPath, { watcher, localPath:sourcePath });
+          console.log(`开始监听本地目录: ${localPath}, 源目录: ${sourcePath}`);
+
+          return { success: true };
+        } catch (error) {
+          console.error("启动本地监听失败:", error);
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : "启动本地监听失败",
+          };
+        }
+      },
+      stopWatchingLocalDirectory: async ({ localPath }) => {
+        try {
+          const watcherInfo = activeLocalWatchers.get(localPath);
+          if (watcherInfo) {
+            watcherInfo.watcher.close();
+            activeLocalWatchers.delete(localPath);
+            console.log(`停止监听本地目录: ${localPath}`);
+          }
+          return { success: true };
+        } catch (error) {
+          console.error("停止本地监听失败:", error);
           return { success: false };
         }
       },

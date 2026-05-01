@@ -40,8 +40,7 @@ const url = await getMainViewUrl();
   
   rpc: drawingRPC,
 });
-export function omitFileChange(data: { fileName: string; }) {
-  // 这里可以添加处理逻辑，例如更新 UI 或者通知其他部分
+export function omitFileChange(data: { fileName: string; isLocalChange?: boolean }) {
   webView.webview.rpc!.request.fileChange(data);
 }
 // 启动后台监听服务

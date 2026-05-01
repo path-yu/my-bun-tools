@@ -6,10 +6,9 @@ export const rpc = Electroview.defineRPC<DrawingRPC >({
   maxRequestTime: 30000,
   handlers: {
     requests: {
-      fileChange(data: { fileName: string; }) {
+      fileChange(data: { fileName: string; isLocalChange?: boolean }) {
         console.log("Received file change event:", data);
         eventBus.emit('fileChanged', data);
-        // 这里可以添加处理逻辑，例如更新 UI 或者通知其他部分
       },
      
     },
