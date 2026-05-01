@@ -25,7 +25,7 @@ export const useToast = () => {
   const ToastComponent = () => (
     <Snackbar 
       open={open} 
-      autoHideDuration={3500} 
+      autoHideDuration={2500} 
       onClose={handleClose}
       // 【关键：居中显示】
       anchorOrigin={{ vertical: 'top', horizontal: 'center' }}

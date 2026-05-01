@@ -7,7 +7,7 @@ import {
   closeZwCadDocument,
   parseDwgPath,
 } from "./autoOpen";
-import { CadBrand, Drawing, CAD_MAP, FileInfo } from "../lib/types";
+import { CadBrand, Drawing, CAD_MAP, FileInfo, SyncLog } from "../lib/types";
 import {
   rollingChecksum,
   strongChecksum,
@@ -119,6 +119,7 @@ export type DrawingRPC = {
           localPath: string;
           fileName: string;
           brandKey: CadBrand;
+          logData?: any;
         };
         response: {
           success: boolean;
@@ -133,6 +134,7 @@ export type DrawingRPC = {
           localPath: string;
           fileName: string;
           brandKey: CadBrand;
+          logData?: any;
         };
         response: {
           success: boolean;
@@ -140,6 +142,14 @@ export type DrawingRPC = {
           copied?: boolean;
           reason?: string;
         };
+      };
+      saveSyncLog: {
+        params: any;
+        response: { success: boolean; error?: string };
+      };
+      getSyncLogs: {
+        params: { sourcePath?: string };
+        response: { success: boolean; logs?: any[]; error?: string };
       };
       cloneDirectory: {
         params: {
@@ -187,6 +197,56 @@ interface WatcherInfo {
 }
 
 const activeWatchers: Map<string, WatcherInfo> = new Map();
+
+// 获取日志文件路径（位于源目录的 .cad-cli/log.json）
+async function getLogFilePath(sourcePath?: string): Promise<string> {
+  const logDir = sourcePath ? path.join(sourcePath, ".cad-cli") : path.join(os.homedir(), ".cad-cli");
+  await fs.mkdir(logDir, { recursive: true });
+  const logFilePath = path.join(logDir, "log.json");
+
+  // 确保日志文件存在，如果不存在则创建空的
+  try {
+    await fs.access(logFilePath);
+  } catch {
+    await fs.writeFile(logFilePath, "[]", "utf-8");
+  }
+
+  return logFilePath;
+}
+
+// 读取日志
+async function readLogs(sourcePath?: string): Promise<SyncLog[]> {
+  try {
+    const logFilePath = await getLogFilePath(sourcePath);
+    const content = await fs.readFile(logFilePath, "utf-8");
+    return JSON.parse(content);
+  } catch (err) {
+    // 文件不存在或解析失败，返回空数组
+    return [];
+  }
+}
+
+// 保存日志
+async function saveLog(logData: Omit<SyncLog, "id" | "createdAt" | "createdBy">): Promise<boolean> {
+  try {
+    const log: SyncLog = {
+      id: crypto.randomUUID(),
+      ...logData,
+      createdAt: new Date().toISOString(),
+      createdBy: os.userInfo().username,
+    };
+
+    const logs = await readLogs(logData.sourcePath);
+    logs.unshift(log); // 新日志加在前面
+
+    const logFilePath = await getLogFilePath(logData.sourcePath);
+    await fs.writeFile(logFilePath, JSON.stringify(logs, null, 2), "utf-8");
+    return true;
+  } catch (err) {
+    console.error("保存日志失败:", err);
+    return false;
+  }
+}
 
 async function cloneDirectoryRecursive(
   _fs: typeof import("node:fs/promises"),
@@ -611,60 +671,61 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
           return { success: false, error: "无法打开目录选择框" };
         }
       },
-     cloneDirectory: async ({ sourcePath, localPath, allowedExtensions }) => {
-  try {
-    // 确保目标根目录存在
-    await fs.mkdir(localPath, { recursive: true });
-
-    const entries = await fs.readdir(sourcePath, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const srcPath = path.join(sourcePath, entry.name);
-      const destPath = path.join(localPath, entry.name);
-
-      if (entry.isDirectory()) {
-        // 如果是子目录，递归调用（注意：确保递归函数也包含同样的占用检查逻辑）
-        await cloneDirectoryRecursive(fs, path, srcPath, destPath, allowedExtensions);
-      } else {
-        // 1. 扩展名过滤
-        if (allowedExtensions && allowedExtensions.length > 0) {
-          const ext = entry.name.split(".").pop()?.toLowerCase() || "";
-          if (!allowedExtensions.includes(ext)) continue;
-        }
-
-        // 2. 核心占用检查：尝试打开文件
-        let fileHandle;
+      cloneDirectory: async ({ sourcePath, localPath, allowedExtensions }) => {
         try {
-          // 尝试以读写权限打开文件。如果文件被 AutoCAD 锁定，这里会抛出 EBUSY
-          fileHandle = await fs.open(srcPath, 'r+'); 
-        } catch (err:any) {
-          console.warn(`[跳过] 文件正被占用: ${entry.name}`);
-          continue; // 关键：跳过当前文件，进入下一次循环
-        } finally {
-          if (fileHandle) await fileHandle.close(); // 检查完一定要关闭句柄
-        }
+          // 确保目标根目录存在
+          await fs.mkdir(localPath, { recursive: true });
 
-        // 3. 执行复制（走到这一步说明文件没被锁定）
-        try {
-          await fs.copyFile(srcPath, destPath);
-        } catch (copyErr:any) {
-         console.warn(`[跳过] 文件正被占用: ${entry.name}`);
+          const entries = await fs.readdir(sourcePath, { withFileTypes: true });
+
+          for (const entry of entries) {
+            const srcPath = path.join(sourcePath, entry.name);
+            const destPath = path.join(localPath, entry.name);
+
+            if (entry.isDirectory()) {
+              // 如果是子目录，递归调用（注意：确保递归函数也包含同样的占用检查逻辑）
+              await cloneDirectoryRecursive(fs, path, srcPath, destPath, allowedExtensions);
+            } else {
+              // 1. 扩展名过滤
+              if (allowedExtensions && allowedExtensions.length > 0) {
+                const ext = entry.name.split(".").pop()?.toLowerCase() || "";
+                if (!allowedExtensions.includes(ext)) continue;
+              }
+
+              // 2. 核心占用检查：尝试打开文件
+              let fileHandle;
+              try {
+                // 尝试以读写权限打开文件。如果文件被 AutoCAD 锁定，这里会抛出 EBUSY
+                fileHandle = await fs.open(srcPath, 'r+');
+              } catch (err: any) {
+                console.warn(`[跳过] 文件正被占用: ${entry.name}`);
+                continue; // 关键：跳过当前文件，进入下一次循环
+              } finally {
+                if (fileHandle) await fileHandle.close(); // 检查完一定要关闭句柄
+              }
+
+              // 3. 执行复制（走到这一步说明文件没被锁定）
+              try {
+                await fs.copyFile(srcPath, destPath);
+              } catch (copyErr: any) {
+                console.warn(`[跳过] 文件正被占用: ${entry.name}`);
+              }
+            }
+          }
+          return { success: true };
+        } catch (error) {
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : "克隆目录失败",
+          };
         }
-      }
-    }
-    return { success: true };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "克隆目录失败",
-    };
-  }
-},
+      },
       updateFromSource: async ({
         sourcePath,
         localPath,
         fileName,
         brandKey,
+        logData,
       }) => {
         try {
           const srcFile = path.join(sourcePath, fileName);
@@ -686,25 +747,31 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
               console.log(
                 `文件 ${fileName} 在 ${brandKey} 中打开，正在关闭...`,
               );
-              closeZwCadDocument({
-                fileNameOrPath: destFile,
-                saveChanges: false,
-                cadBrand: brandKey,
-              });
+              // 判断是否为dwg文件
+              if (fileName.toLowerCase().endsWith(".dwg")) {
+                closeZwCadDocument({
+                  fileNameOrPath: destFile,
+                  saveChanges: false,
+                  cadBrand: brandKey,
+                });
+              }
               await new Promise((resolve) => setTimeout(resolve, 500));
             }
           }
 
           const result = await smartCopyFile(srcFile, destFile);
+          // 保存日志
+          await saveLog(logData);
 
           if (wasOpen && activeBrand) {
-            Utils.openExternal(destFile);
-            await new Promise((resolve) => setTimeout(resolve, 500));
-            console.log(
-              `重新打开文件 ${fileName} 在 ${CAD_MAP[activeBrand].brandName} 中...`,
-            );
+            if (fileName.toLowerCase().endsWith(".dwg")) {
+              Utils.openExternal(destFile);
+                await new Promise((resolve) => setTimeout(resolve, 500));
+              console.log(
+                `重新打开文件 ${fileName} 在 ${CAD_MAP[activeBrand].brandName} 中...`,
+              );
+            }
           }
-
           return {
             success: true,
             copied: result.copied,
@@ -717,7 +784,7 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
           };
         }
       },
-      syncToSource: async ({ sourcePath, localPath, fileName, brandKey }) => {
+      syncToSource: async ({ sourcePath, localPath, fileName, brandKey, logData }) => {
         try {
           const srcFile = path.join(localPath, fileName);
           const destFile = path.join(sourcePath, fileName);
@@ -726,15 +793,13 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
 
           let wasOpen = false;
           let activeBrand: CadBrand | null = null;
-          console.log(destFile);
-          console.log(srcFile);
           const openFiles = getZwCadFiles(brandKey);
           const openFile = openFiles.find((f) => f.path === destFile);
           if (openFile) {
             wasOpen = true;
             activeBrand = brandKey;
             //判断是否为自己打开的文件，如果是则直接关闭，否则可能会误伤用户正在编辑的文件
-            if (openFile.owner === os.userInfo().username) {
+            if (openFile.owner === os.userInfo().username && fileName.toLowerCase().endsWith(".dwg")) {
               closeZwCadDocument({
                 fileNameOrPath: destFile,
                 saveChanges: false,
@@ -755,15 +820,16 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
               reason: `文件正在被 ${dwgData.owner} 打开，无法同步到共享盘`,
             };
           }
-
           const result = await smartCopyFile(srcFile, destFile);
-
+          await saveLog(logData);
           if (wasOpen && activeBrand) {
-            Utils.openExternal(destFile);
-            await new Promise((resolve) => setTimeout(resolve, 500));
-            console.log(
-              `重新打开文件 ${fileName} 在 ${CAD_MAP[activeBrand].brandName} 中...`,
-            );
+            if (fileName.toLowerCase().endsWith(".dwg")) {
+              Utils.openExternal(destFile);
+                await new Promise((resolve) => setTimeout(resolve, 500));
+              console.log(
+                `重新打开文件 ${fileName} 在 ${CAD_MAP[activeBrand].brandName} 中...`,
+              );
+            }
           }
 
           return {
@@ -775,6 +841,28 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
           return {
             success: false,
             error: error instanceof Error ? error.message : "同步文件失败",
+          };
+        }
+      },
+      saveSyncLog: async (logData) => {
+        try {
+          const success = await saveLog(logData);
+          return { success };
+        } catch (error) {
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : "保存日志失败",
+          };
+        }
+      },
+      getSyncLogs: async ({ sourcePath }) => {
+        try {
+          const logs = await readLogs(sourcePath);
+          return { success: true, logs };
+        } catch (error) {
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : "读取日志失败",
           };
         }
       },

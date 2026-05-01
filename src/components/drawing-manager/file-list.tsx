@@ -1,18 +1,9 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { DataGrid, GridColDef, GridRenderCellParams } from "@mui/x-data-grid";
 import { ThemeProvider, createTheme, Box } from "@mui/material";
-import {
-  FileText,
-  Folder,
-  FolderOpen,
-  Search,
-  ChevronDown,
-  Download,
-  Upload,
-  X,
-} from "lucide-react";
-import { FileInfo } from "@/lib/types";
+import { FileText, Folder, FolderOpen, Search, ChevronDown, Download, Upload, X } from "lucide-react";
+import { FileInfo, SyncReasonType } from "@/lib/types";
 import { eventBus, getElectroView } from "@/lib/rpc";
 import { useAppTheme } from "@/components/ThemeContext";
 import { useToast } from "../useToast";
@@ -20,6 +11,8 @@ import { readCadConfig } from "@/lib/utils";
 
 interface FileListProps {
   searchQuery: string;
+  sourcePath?: string;
+  onSourcePathChange?: (path: string) => void;
 }
 
 function formatFileSize(bytes: number): string {
@@ -91,95 +84,184 @@ const FILE_TYPE_EXTENSIONS: Record<FileType, string[]> = {
   image: ["jpg", "jpeg", "png", "gif", "bmp"],
 };
 
-const CLONE_TYPE_OPTIONS: Array<{
-  id: FileType;
-  label: string;
-  extensions: string[];
-}> = [
+const CLONE_TYPE_OPTIONS: Array<{ id: FileType; label: string; extensions: string[] }> = [
   { id: "all", label: "全部文件", extensions: [] },
-  {
-    id: "dwg",
-    label: "AutoCAD图纸 (.dwg, .dxf)",
-    extensions: ["dwg", "dxf", "dwt"],
-  },
-  {
-    id: "excel",
-    label: "Excel表格 (.xls, .xlsx)",
-    extensions: ["xls", "xlsx", "csv"],
-  },
-  {
-    id: "word",
-    label: "Word文档 (.doc, .docx)",
-    extensions: ["doc", "docx", "txt"],
-  },
+  { id: "dwg", label: "AutoCAD图纸 (.dwg, .dxf)", extensions: ["dwg", "dxf", "dwt"] },
+  { id: "excel", label: "Excel表格 (.xls, .xlsx)", extensions: ["xls", "xlsx", "csv"] },
+  { id: "word", label: "Word文档 (.doc, .docx)", extensions: ["doc", "docx", "txt"] },
   { id: "ppt", label: "PowerPoint (.ppt, .pptx)", extensions: ["ppt", "pptx"] },
   { id: "pdf", label: "PDF文档 (.pdf)", extensions: ["pdf"] },
-  {
-    id: "image",
-    label: "图片文件 (.jpg, .png, 等)",
-    extensions: ["jpg", "jpeg", "png", "gif", "bmp"],
-  },
+  { id: "image", label: "图片文件 (.jpg, .png, 等)", extensions: ["jpg", "jpeg", "png", "gif", "bmp"] },
 ];
 
-export function FileList({ searchQuery }: FileListProps) {
+interface SyncReasonModalProps {
+  isOpen: boolean;
+  fileName: string;
+  onClose: () => void;
+  onConfirm: (reasonType: SyncReasonType, reason: string) => void;
+  isDark: boolean;
+}
+
+function SyncReasonModal({ isOpen, fileName, onClose, onConfirm, isDark }: SyncReasonModalProps) {
+  const [selectedReasonType, setSelectedReasonType] = useState<SyncReasonType>("modify");
+  const [customReason, setCustomReason] = useState("");
+
+  const reasonOptions = [
+    { value: "modify" as SyncReasonType, label: "图纸修改" },
+    { value: "new" as SyncReasonType, label: "上传新图纸" },
+    { value: "delete" as SyncReasonType, label: "删除图纸" },
+    { value: "custom" as SyncReasonType, label: "自定义原因" },
+  ];
+
+  const handleConfirm = () => {
+    const reason = selectedReasonType === "custom" ? customReason : reasonOptions.find(o => o.value === selectedReasonType)?.label || "";
+    onConfirm(selectedReasonType, reason);
+  };
+
+  if (!isOpen) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className={`rounded-xl shadow-xl w-full max-w-md ${isDark ? "bg-slate-800 text-slate-100" : "bg-white text-slate-900"}`}>
+        <div className="flex items-center justify-between p-4 border-b border-current/10">
+          <h3 className="text-lg font-semibold">同步原因</h3>
+          <button onClick={onClose} className="p-1 rounded hover:bg-current/10">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          <p className="text-sm text-muted-foreground">
+            正在同步文件: <span className="font-medium">{fileName}</span>
+          </p>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">请选择同步原因:</label>
+            <div className="space-y-2">
+              {reasonOptions.map((option) => (
+                <label
+                  key={option.value}
+                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selectedReasonType === option.value
+                    ? isDark
+                      ? "bg-blue-500/20 border-blue-500/30"
+                      : "bg-blue-50 border-blue-200"
+                    : isDark
+                      ? "border-slate-600 hover:bg-slate-700/50"
+                      : "border-slate-200 hover:bg-slate-50"
+                    }`}
+                >
+                  <input
+                    type="radio"
+                    name="syncReason"
+                    value={option.value}
+                    checked={selectedReasonType === option.value}
+                    onChange={() => setSelectedReasonType(option.value)}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500/50"
+                  />
+                  <span className="font-medium">{option.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {selectedReasonType === "custom" && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">请输入自定义原因:</label>
+              <textarea
+                value={customReason}
+                onChange={(e) => setCustomReason(e.target.value)}
+                placeholder="请输入同步原因..."
+                className={`w-full rounded-lg border p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${isDark
+                  ? "bg-slate-700 border-slate-600 text-slate-200 placeholder:text-slate-500"
+                  : "bg-white border-slate-200 text-slate-800 placeholder:text-slate-400"
+                  }`}
+                rows={3}
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 p-4 border-t border-current/10">
+          <button
+            onClick={onClose}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-slate-700 hover:bg-slate-600" : "bg-slate-100 hover:bg-slate-200"
+              }`}
+          >
+            取消
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={selectedReasonType === "custom" && !customReason.trim()}
+            className="px-4 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 font-medium transition-colors"
+          >
+            确认同步
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+export function FileList({ searchQuery, sourcePath: propSourcePath, onSourcePathChange }: FileListProps) {
   const { isDark } = useAppTheme();
   const { showToast, ToastComponent } = useToast();
   const [files, setFiles] = useState<FileInfo[]>([]);
   const [loading, setLoading] = useState(false);
-  const [sourcePath, setSourcePath] = useState<string>(
-    localStorage.getItem("sourcePath") || "",
-  );
-  const [localPath, setLocalPath] = useState<string>(
-    localStorage.getItem("localPath") || "",
-  );
-  const [selectedFileType, setSelectedFileType] = useState<FileType>("dwg");
+  const [sourcePath, setSourcePath] = useState<string>(propSourcePath || localStorage.getItem("sourcePath") || "");
+  const [localPath, setLocalPath] = useState<string>(localStorage.getItem("localPath") || "");
+  const [selectedFileType, setSelectedFileType] = useState<FileType>("all");
   const [isTypeDropdownOpen, setIsTypeDropdownOpen] = useState(false);
   const [isCloneModalOpen, setIsCloneModalOpen] = useState(false);
-  const [cloneSelectedTypes, setCloneSelectedTypes] = useState<FileType[]>([
-    "all",
-  ]);
+  const [cloneSelectedTypes, setCloneSelectedTypes] = useState<FileType[]>(["all"]);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
   const [updatingFiles, setUpdatingFiles] = useState<Set<string>>(new Set());
   const [syncingFiles, setSyncingFiles] = useState<Set<string>>(new Set());
-  const ignoredExts = ["dwl", "bak", "temp"]; // AutoCAD 临时文件扩展名列表
+  const [syncReasonModal, setSyncReasonModal] = useState<{
+    isOpen: boolean;
+    fileName: string;
+    operation: "syncToSource" | "updateFromSource";
+  }>({ isOpen: false, fileName: "", operation: "syncToSource" });
+
+  // 同步 sourcePath 到父组件
+  useEffect(() => {
+    if (propSourcePath !== undefined && propSourcePath !== sourcePath) {
+      setSourcePath(propSourcePath);
+    }
+  }, [propSourcePath]);
 
   // 保存路径到本地存储
   useEffect(() => {
     if (sourcePath) {
       localStorage.setItem("sourcePath", sourcePath);
+      onSourcePathChange?.(sourcePath);
     }
     if (localPath) {
       localStorage.setItem("localPath", localPath);
     }
-  }, [sourcePath, localPath]);
+  }, [sourcePath, localPath, onSourcePathChange]);
 
-  const loadDirectory = useCallback(
-    async (path: string) => {
-      setLoading(true);
-      try {
-        const result = await getElectroView().rpc!.request.listDirectory({
-          path,
-          sourcePath,
+  const loadDirectory = useCallback(async (path: string) => {
+    setLoading(true);
+    try {
+      const result = await getElectroView().rpc!.request.listDirectory({ path, sourcePath });
+      if (result.success && result.files) {
+        const sortedFiles = result.files.sort((a: FileInfo, b: FileInfo) => {
+          if (a.isDirectory && !b.isDirectory) return -1;
+          if (!a.isDirectory && b.isDirectory) return 1;
+          return a.name.localeCompare(b.name);
         });
-        if (result.success && result.files) {
-          const sortedFiles = result.files.sort((a: FileInfo, b: FileInfo) => {
-            if (a.isDirectory && !b.isDirectory) return -1;
-            if (!a.isDirectory && b.isDirectory) return 1;
-            return a.name.localeCompare(b.name);
-          });
-          setFiles(sortedFiles);
-        } else {
-          showToast(result.error || "读取目录失败", "error");
-        }
-      } catch (err) {
-        console.error("加载目录失败:", err);
-        showToast("读取目录失败", "error");
-      } finally {
-        setLoading(false);
+        setFiles(sortedFiles);
+      } else {
+        showToast(result.error || "读取目录失败", "error");
       }
-    },
-    [showToast, sourcePath],
-  );
+    } catch (err) {
+      console.error("加载目录失败:", err);
+      showToast("读取目录失败", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast, sourcePath]);
 
   // 加载本地目录
   useEffect(() => {
@@ -188,35 +270,73 @@ export function FileList({ searchQuery }: FileListProps) {
     }
   }, [localPath, loadDirectory]);
 
-
+  // 文件变更回调
+  const handleFileChange = (data: { fileName: string }) => {
+    handleUpdateFile(data.fileName);
+  }
+  // 启动监听
+  const startWatching = async () => {
+    try {
+      const result = await getElectroView().rpc!.request.startWatchingDirectory({
+        sourcePath,
+        localPath
+      });
+      eventBus.on('fileChanged', handleFileChange);
+      if (result.success) {
+        console.log(`成功启动对源目录 ${sourcePath} 的监听`);
+        showToast("已启动自动监听，源目录文件变更将自动同步", "success");
+      } else {
+        showToast(result.error || "启动监听失败", "error");
+      }
+    } catch (err) {
+      console.error("启动监听失败:", err);
+      showToast("启动监听失败", "error");
+    }
+  };
+  const stopWathing = () => {
+    getElectroView().rpc!.request.stopWatchingDirectory({ sourcePath })
+      .then(result => {
+        if (result.success) {
+          console.log(`已停止对源目录 ${sourcePath} 的监听`);
+          eventBus.off('fileChanged', handleFileChange);
+        }
+      })
+      .catch(err => {
+        console.error("停止监听失败:", err);
+      });
+  }
   // 监听源目录文件变化
   useEffect(() => {
-    if (!autoSyncEnabled || !sourcePath || !localPath) {
+    if (!sourcePath || !localPath) {
       return;
     }
-    startWatching();
+    if (autoSyncEnabled) {
+      startWatching();
+
+    } else {
+      stopWathing();
+    }
     // 清理
     return () => {
       // 停止监听
-      stopWatching();
+      if (sourcePath) {
+        stopWathing();
+      }
     };
-  }, []);
+  }, [autoSyncEnabled, sourcePath, localPath]);
 
   const filteredFiles = useMemo(() => {
     return files.filter((file) => {
       // 过滤掉 dwl 临时文件（AutoCAD 打开时自动生成）
-      if (ignoredExts.includes(file.extension.toLowerCase())) return false;
+      if (file.extension.toLowerCase() === "dwl" || file.extension.toLowerCase() === "bak") return false;
 
       const matchesSearch = searchQuery
         ? fuzzyMatch(file.name, searchQuery)
         : true;
 
-      const matchesType =
-        selectedFileType === "all"
-          ? true
-          : FILE_TYPE_EXTENSIONS[selectedFileType].includes(
-              file.extension.toLowerCase(),
-            );
+      const matchesType = selectedFileType === "all"
+        ? true
+        : FILE_TYPE_EXTENSIONS[selectedFileType].includes(file.extension.toLowerCase());
 
       return matchesSearch && matchesType;
     });
@@ -224,19 +344,12 @@ export function FileList({ searchQuery }: FileListProps) {
 
   const syncStatusSummary = useMemo(() => {
     if (!sourcePath || files.length === 0) return null;
-    const nonDirFiles = files.filter(
-      (f) =>
-        !f.isDirectory &&
-        f.extension.toLowerCase() !== "dwl" &&
-        f.extension.toLowerCase() !== "bak",
-    );
+    const nonDirFiles = files.filter(f => !f.isDirectory && f.extension.toLowerCase() !== "dwl" && f.extension.toLowerCase() !== "bak");
     if (nonDirFiles.length === 0) return null;
 
-    const synced = nonDirFiles.filter((f) => f.syncStatus === "synced").length;
-    const modified = nonDirFiles.filter(
-      (f) => f.syncStatus === "modified",
-    ).length;
-    const newFiles = nonDirFiles.filter((f) => f.syncStatus === "new").length;
+    const synced = nonDirFiles.filter(f => f.syncStatus === "synced").length;
+    const modified = nonDirFiles.filter(f => f.syncStatus === "modified").length;
+    const newFiles = nonDirFiles.filter(f => f.syncStatus === "new").length;
 
     return { synced, modified, new: newFiles, total: nonDirFiles.length };
   }, [files, sourcePath]);
@@ -244,9 +357,7 @@ export function FileList({ searchQuery }: FileListProps) {
   // 选择源目录
   const handleSelectSource = async () => {
     try {
-      const result = await getElectroView().rpc!.request.selectSourceDirectory(
-        {},
-      );
+      const result = await getElectroView().rpc!.request.selectSourceDirectory({});
       if (result.success && result.path) {
         setSourcePath(result.path);
         showToast("源目录已设置", "success");
@@ -260,9 +371,7 @@ export function FileList({ searchQuery }: FileListProps) {
   // 选择本地目录
   const handleSelectLocal = async () => {
     try {
-      const result = await getElectroView().rpc!.request.selectLocalDirectory(
-        {},
-      );
+      const result = await getElectroView().rpc!.request.selectLocalDirectory({});
       if (result.success && result.path) {
         setLocalPath(result.path);
         showToast("本地目录已设置", "success");
@@ -284,10 +393,7 @@ export function FileList({ searchQuery }: FileListProps) {
     let allowedExtensions: string[] = [];
     if (!cloneSelectedTypes.includes("all")) {
       cloneSelectedTypes.forEach((type) => {
-        allowedExtensions = [
-          ...allowedExtensions,
-          ...FILE_TYPE_EXTENSIONS[type],
-        ];
+        allowedExtensions = [...allowedExtensions, ...FILE_TYPE_EXTENSIONS[type]];
       });
       allowedExtensions = [...new Set(allowedExtensions)]; // 去重
     }
@@ -297,16 +403,10 @@ export function FileList({ searchQuery }: FileListProps) {
       const result = await getElectroView().rpc!.request.cloneDirectory({
         sourcePath,
         localPath,
-        allowedExtensions:
-          allowedExtensions.length > 0 ? allowedExtensions : undefined,
+        allowedExtensions: allowedExtensions.length > 0 ? allowedExtensions : undefined
       });
       if (result.success) {
-        showToast(
-          allowedExtensions.length > 0
-            ? "过滤后的目录克隆成功"
-            : "目录克隆成功",
-          "success",
-        );
+        showToast(allowedExtensions.length > 0 ? "过滤后的目录克隆成功" : "目录克隆成功", "success");
         setIsCloneModalOpen(false);
         loadDirectory(localPath);
       } else {
@@ -317,6 +417,47 @@ export function FileList({ searchQuery }: FileListProps) {
       showToast("克隆失败", "error");
     } finally {
       setLoading(false);
+    }
+  };
+
+
+  // 执行同步文件操作
+  const executeSyncFile = async (fileName: string, reasonType: SyncReasonType, reason: string) => {
+    setSyncingFiles(prev => new Set(prev).add(fileName));
+    showToast(`正在同步 ${fileName}...`, "info");
+
+    try {
+      const cadConfig = readCadConfig();
+      const brandKey = cadConfig?.brandKey;
+      const result = await getElectroView().rpc!.request.syncToSource({
+        sourcePath,
+        localPath,
+        fileName,
+        brandKey,
+        logData: {
+          fileName,
+          reasonType,
+          reason,
+          sourcePath,
+          localPath,
+          operation: "syncToSource"
+        }
+      });
+      if (result.success) {
+        showToast(`${fileName} 同步成功`, "success");
+        loadDirectory(localPath);
+      } else {
+        showToast(result.error || "同步失败", "error");
+      }
+    } catch (err) {
+      console.error("同步失败:", err);
+      showToast("同步失败", "error");
+    } finally {
+      setSyncingFiles(prev => {
+        const next = new Set(prev);
+        next.delete(fileName);
+        return next;
+      });
     }
   };
 
@@ -346,10 +487,7 @@ export function FileList({ searchQuery }: FileListProps) {
         brandKey,
       });
       if (result.success) {
-        showToast(
-          `${fileName} 更新成功`,
-          "success",
-        );
+        showToast(`${fileName} 更新成功`, "success",);
         loadDirectory(localPath);
       } else {
         showToast(result.error || "更新失败", "error");
@@ -366,105 +504,42 @@ export function FileList({ searchQuery }: FileListProps) {
     }
   };
 
-  // 上传单个文件（从本地到源）
-  const handleSyncFile = async (fileName: string) => {
+  // 同步单个文件（从本地到源）
+  const handleSyncFile = (fileName: string) => {
     if (!sourcePath || !localPath) {
       showToast("请先设置源目录和本地目录", "error");
       return;
     }
 
     if (syncingFiles.has(fileName)) {
-      showToast("正在上传中，请稍候...", "info");
+      showToast("正在同步中，请稍候...", "info");
       return;
     }
 
-    setSyncingFiles((prev) => new Set(prev).add(fileName));
-    showToast(`正在上传 ${fileName}...`, "info");
+    setSyncReasonModal({
+      isOpen: true,
+      fileName,
+      operation: "syncToSource"
+    });
+  };
 
-    try {
-      const result = await getElectroView().rpc!.request.syncToSource({
-        sourcePath,
-        localPath,
-        fileName,
-        brandKey: readCadConfig()?.brandKey,
-      });
-      if (result.success) {
-        const reason = result || "";
-        showToast(
-          `${fileName} 上传成功${reason ? ` (${reason})` : ""}`,
-          "success",
-        );
-        loadDirectory(localPath);
-      } else {
-        showToast(result.error || "上传失败", "error");
-      }
-    } catch (err) {
-      console.error("上传失败:", err);
-      showToast("上传失败", "error");
-    } finally {
-      setSyncingFiles((prev) => {
-        const next = new Set(prev);
-        next.delete(fileName);
-        return next;
-      });
+  // 确认同步原因后的处理
+  const handleConfirmSyncReason = (reasonType: SyncReasonType, reason: string) => {
+    const { fileName, operation } = syncReasonModal;
+    setSyncReasonModal(prev => ({ ...prev, isOpen: false }));
+
+    if (operation === "syncToSource") {
+      executeSyncFile(fileName, reasonType, reason);
     }
   };
-  const handleFileChange = (data: { fileName: string }) => {
-      handleUpdateFile(data.fileName);
-  }
-  const startWatching = async () => {
-    try {
-      const result = await getElectroView().rpc!.request.startWatchingDirectory(
-        {
-          sourcePath,
-          localPath,
-        },
-      );
 
-      if (result.success) {
-        console.log(`成功启动对源目录 ${sourcePath} 的监听`);
-        eventBus.on("fileChanged",handleFileChange);
-        showToast("已启动自动监听，源目录文件变更将自动更新本地文件", "success");
-      } else {
-        showToast(result.error || "启动监听失败", "error");
-      }
-    } catch (err) {
-      console.error("启动监听失败:", err);
-      showToast("启动监听失败", "error");
-    }
-  };
-  const stopWatching = async () => {
-    getElectroView()
-      .rpc!.request.stopWatchingDirectory({ sourcePath })
-      .then((result) => {
-        if (result.success) {
-          console.log(`已停止对源目录 ${sourcePath} 的监听`);
-          eventBus.off("fileChanged", handleFileChange);
-        }
-      })
-      .catch((err) => {
-        console.error("停止监听失败:", err);
-      });
-  };
-  const handleAutoSyncToggle = (value: boolean) => {
-    if (value) {
-      // 启动监听
-      startWatching();
-    } else {
-      stopWatching();
-    }
-
-    setAutoSyncEnabled(value);
-  };
   const handleRowDoubleClick = async (params: { row: FileInfo }) => {
     const file = params.row;
     if (file.isDirectory) {
       loadDirectory(file.path);
     } else {
       try {
-        const result = await getElectroView().rpc!.request.openFile({
-          filePath: file.path,
-        });
+        const result = await getElectroView().rpc!.request.openFile({ filePath: file.path });
         if (!result.success) {
           showToast(result.error || "打开文件失败", "error");
         }
@@ -479,10 +554,10 @@ export function FileList({ searchQuery }: FileListProps) {
     if (type === "all") {
       setCloneSelectedTypes(["all"]);
     } else {
-      const newSelected = cloneSelectedTypes.filter((t) => t !== "all");
+      const newSelected = cloneSelectedTypes.filter(t => t !== "all");
       if (newSelected.includes(type)) {
         // 如果取消选中后没有任何类型被选中，回到"全部文件"
-        const filtered = newSelected.filter((t) => t !== type);
+        const filtered = newSelected.filter(t => t !== type);
         if (filtered.length === 0) {
           setCloneSelectedTypes(["all"]);
         } else {
@@ -536,12 +611,13 @@ export function FileList({ searchQuery }: FileListProps) {
       headerName: "",
       width: 50,
       sortable: false,
-      renderCell: (p: GridRenderCellParams) =>
+      renderCell: (p: GridRenderCellParams) => (
         p.row.isDirectory ? (
           <Folder className="h-5 w-5 text-yellow-500" />
         ) : (
           <FileText className="h-5 w-5 text-blue-400" />
-        ),
+        )
+      ),
     },
     {
       field: "name",
@@ -552,13 +628,12 @@ export function FileList({ searchQuery }: FileListProps) {
       renderCell: (p: GridRenderCellParams) => (
         <div className="flex items-center gap-1 max-w-full">
           <span
-            className={`font-medium truncate ${
-              p.row.isDirectory
-                ? isDark
-                  ? "text-yellow-400"
-                  : "text-yellow-600"
-                : ""
-            }`}
+            className={`font-medium truncate ${p.row.isDirectory
+              ? isDark
+                ? "text-yellow-400"
+                : "text-yellow-600"
+              : ""
+              }`}
             title={p.value}
           >
             {p.value}
@@ -571,7 +646,9 @@ export function FileList({ searchQuery }: FileListProps) {
       headerName: "创建日期",
       width: 160,
       renderCell: (p: GridRenderCellParams) => (
-        <span className="text-sm text-slate-500">{formatDate(p.value)}</span>
+        <span className="text-sm text-slate-500">
+          {formatDate(p.value)}
+        </span>
       ),
     },
     {
@@ -580,15 +657,14 @@ export function FileList({ searchQuery }: FileListProps) {
       width: 120,
       renderCell: (p: GridRenderCellParams) => (
         <span
-          className={`px-2 py-0.5 rounded text-xs ${
-            p.row.isDirectory
-              ? isDark
-                ? "bg-yellow-500/10 text-yellow-400"
-                : "bg-yellow-100 text-yellow-700"
-              : isDark
-                ? "bg-blue-500/10 text-blue-400"
-                : "bg-blue-100 text-blue-700"
-          }`}
+          className={`px-2 py-0.5 rounded text-xs ${p.row.isDirectory
+            ? isDark
+              ? "bg-yellow-500/10 text-yellow-400"
+              : "bg-yellow-100 text-yellow-700"
+            : isDark
+              ? "bg-blue-500/10 text-blue-400"
+              : "bg-blue-100 text-blue-700"
+            }`}
         >
           {p.row.isDirectory ? "文件夹" : getFileType(p.value)}
         </span>
@@ -612,27 +688,10 @@ export function FileList({ searchQuery }: FileListProps) {
       renderCell: (p: GridRenderCellParams) => {
         if (p.row.isDirectory) return null;
         const status = p.row.syncStatus;
-        if (!status || status === "unknown")
-          return <span className="text-slate-400">-</span>;
-        if (status === "synced")
-          return (
-            <span className="text-emerald-500 flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              已同步
-            </span>
-          );
-        if (status === "modified")
-          return (
-            <span className="text-amber-500 flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-amber-500"></span>未同步
-            </span>
-          );
-        if (status === "new")
-          return (
-            <span className="text-blue-500 flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-blue-500"></span>新增
-            </span>
-          );
+        if (!status || status === "unknown") return <span className="text-slate-400">-</span>;
+        if (status === "synced") return <span className="text-emerald-500 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span>已同步</span>;
+        if (status === "modified") return <span className="text-amber-500 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span>未同步</span>;
+        if (status === "new") return <span className="text-blue-500 flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500"></span>新增</span>;
         return null;
       },
     },
@@ -654,11 +713,10 @@ export function FileList({ searchQuery }: FileListProps) {
                 handleUpdateFile(p.row.name);
               }}
               disabled={isUpdating || isSyncing}
-              className={`inline-flex h-8 items-center justify-center gap-1 px-2 rounded text-xs font-medium transition-colors cursor-pointer ${
-                isUpdating
-                  ? "bg-blue-100 text-blue-400 cursor-not-allowed"
-                  : "hover:bg-blue-500/20 text-blue-500"
-              }`}
+              className={`inline-flex h-8 items-center justify-center gap-1 px-2 rounded text-xs font-medium transition-colors cursor-pointer ${isUpdating
+                ? "bg-blue-100 text-blue-400 cursor-not-allowed"
+                : "hover:bg-blue-500/20 text-blue-500"
+                }`}
               title="更新（从源目录获取）"
             >
               {isUpdating ? (
@@ -679,12 +737,11 @@ export function FileList({ searchQuery }: FileListProps) {
                 handleSyncFile(p.row.name);
               }}
               disabled={isUpdating || isSyncing}
-              className={`inline-flex h-8 items-center justify-center gap-1 px-2 rounded text-xs font-medium transition-colors cursor-pointer ${
-                isSyncing
-                  ? "bg-green-100 text-green-400 cursor-not-allowed"
-                  : "hover:bg-green-500/20 text-green-500"
-              }`}
-              title="上传（上传到源目录）"
+              className={`inline-flex h-8 items-center justify-center gap-1 px-2 rounded text-xs font-medium transition-colors cursor-pointer ${isSyncing
+                ? "bg-green-100 text-green-400 cursor-not-allowed"
+                : "hover:bg-green-500/20 text-green-500"
+                }`}
+              title="同步（上传到源目录）"
             >
               {isSyncing ? (
                 <>
@@ -694,7 +751,7 @@ export function FileList({ searchQuery }: FileListProps) {
               ) : (
                 <>
                   <Upload className="h-3 w-3" />
-                  上传
+                  同步
                 </>
               )}
             </button>
@@ -714,11 +771,10 @@ export function FileList({ searchQuery }: FileListProps) {
   if (!localPath) {
     return (
       <div
-        className={`flex flex-col items-center justify-center rounded-2xl py-20 border-2 border-dashed ${
-          isDark
-            ? "bg-slate-800/30 border-slate-700"
-            : "bg-slate-50 border-slate-200"
-        }`}
+        className={`flex flex-col items-center justify-center rounded-2xl py-20 border-2 border-dashed ${isDark
+          ? "bg-slate-800/30 border-slate-700"
+          : "bg-slate-50 border-slate-200"
+          }`}
       >
         <Folder className="h-12 w-12 text-slate-600 mb-4 opacity-20" />
         <p className="text-sm text-slate-500 mb-4">请先设置本地目录和源目录</p>
@@ -743,9 +799,8 @@ export function FileList({ searchQuery }: FileListProps) {
   if (loading) {
     return (
       <div
-        className={`flex flex-col items-center justify-center rounded-2xl py-20 ${
-          isDark ? "bg-slate-800/30" : "bg-slate-50"
-        }`}
+        className={`flex flex-col items-center justify-center rounded-2xl py-20 ${isDark ? "bg-slate-800/30" : "bg-slate-50"
+          }`}
       >
         <div className="h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4" />
         <p className="text-sm text-slate-500">加载中...</p>
@@ -756,38 +811,30 @@ export function FileList({ searchQuery }: FileListProps) {
   return (
     <>
       <div
-        className={`rounded-2xl border overflow-hidden ${
-          isDark
-            ? "bg-slate-900/50 border-slate-800"
-            : "bg-white border-slate-200"
-        }`}
+        className={`rounded-2xl border overflow-hidden ${isDark ? "bg-slate-900/50 border-slate-800" : "bg-white border-slate-200"
+          }`}
       >
         <div
-          className={`px-4 py-3 border-b ${
-            isDark
-              ? "border-slate-800 bg-slate-800/30"
-              : "border-slate-200 bg-slate-50"
-          }`}
+          className={`px-4 py-3 border-b ${isDark ? "border-slate-800 bg-slate-800/30" : "border-slate-200 bg-slate-50"
+            }`}
         >
           <div className="flex flex-wrap items-center gap-3 mb-3">
             <div className="flex items-center gap-2 flex-1">
-              <FolderOpen className="h-4 w-4 text-yellow-500 shrink-0" />
+              <FolderOpen className="h-4 w-4 text-yellow-500 flex-shrink-0" />
               <span className="text-xs text-slate-500">源目录:</span>
               <span
-                className={`text-sm font-medium truncate flex-1 ${
-                  isDark ? "text-slate-300" : "text-slate-700"
-                }`}
+                className={`text-sm font-medium truncate flex-1 ${isDark ? "text-slate-300" : "text-slate-700"
+                  }`}
                 title={sourcePath}
               >
                 {sourcePath || "未设置"}
               </span>
               <button
                 onClick={handleSelectSource}
-                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                  isDark
-                    ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                    : "bg-slate-200 text-slate-600 hover:bg-slate-300"
-                }`}
+                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${isDark
+                  ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                  : "bg-slate-200 text-slate-600 hover:bg-slate-300"
+                  }`}
               >
                 选择
               </button>
@@ -796,72 +843,61 @@ export function FileList({ searchQuery }: FileListProps) {
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2 flex-1">
-              <FolderOpen className="h-4 w-4 text-blue-500 shrink-0" />
+              <FolderOpen className="h-4 w-4 text-blue-500 flex-shrink-0" />
               <span className="text-xs text-slate-500">本地目录:</span>
               <span
-                className={`text-sm font-medium truncate flex-1 ${
-                  isDark ? "text-slate-300" : "text-slate-700"
-                }`}
+                className={`text-sm font-medium truncate flex-1 ${isDark ? "text-slate-300" : "text-slate-700"
+                  }`}
                 title={localPath}
               >
                 {localPath}
               </span>
               <button
                 onClick={handleSelectLocal}
-                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                  isDark
-                    ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                    : "bg-slate-200 text-slate-600 hover:bg-slate-300"
-                }`}
+                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${isDark
+                  ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                  : "bg-slate-200 text-slate-600 hover:bg-slate-300"
+                  }`}
               >
                 选择
               </button>
               <button
                 onClick={() => setIsCloneModalOpen(true)}
-                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                  isDark
-                    ? "bg-purple-600 text-white hover:bg-purple-700"
-                    : "bg-purple-600 text-white hover:bg-purple-700"
-                }`}
+                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${isDark
+                  ? "bg-purple-600 text-white hover:bg-purple-700"
+                  : "bg-purple-600 text-white hover:bg-purple-700"
+                  }`}
                 disabled={!sourcePath}
               >
                 克隆源目录
               </button>
               <label
-                className={`flex items-center gap-2 px-2 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
-                  autoSyncEnabled
-                    ? isDark
-                      ? "bg-green-500/20 text-green-400"
-                      : "bg-green-50 text-green-600"
-                    : isDark
-                      ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-                title="自动更新（监听源目录文件变更并自动更新）"
+                className={`flex items-center gap-2 px-2 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${autoSyncEnabled
+                  ? isDark
+                    ? "bg-green-500/20 text-green-400"
+                    : "bg-green-50 text-green-600"
+                  : isDark
+                    ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                title="自动更新（监听源目录文件变更并自动同步更新）"
               >
                 <input
                   type="checkbox"
                   checked={autoSyncEnabled}
-                  onChange={(e) => handleAutoSyncToggle(e.target.checked)}
+                  onChange={(e) => setAutoSyncEnabled(e.target.checked)}
                   disabled={!sourcePath || !localPath}
                   className="h-3 w-3 rounded border-current/30 text-green-600 focus:ring-green-500/50"
                 />
-                <span>{autoSyncEnabled ? "监听中" : "自动更新"}</span>
+                <span>{autoSyncEnabled ? "监听中" : "自动同步更新"}</span>
               </label>
               {syncStatusSummary && (
-                <div
-                  className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${
-                    syncStatusSummary.modified > 0
-                      ? "bg-amber-500/20 text-amber-600"
-                      : "bg-emerald-500/20 text-emerald-600"
-                  }`}
-                >
-                  <span>
-                    {syncStatusSummary.modified > 0 ? "未同步" : "已同步"}
-                  </span>
-                  <span className="opacity-60">
-                    ({syncStatusSummary.synced}/{syncStatusSummary.total})
-                  </span>
+                <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${syncStatusSummary.modified > 0
+                  ? "bg-amber-500/20 text-amber-600"
+                  : "bg-emerald-500/20 text-emerald-600"
+                  }`}>
+                  <span>{syncStatusSummary.modified > 0 ? "未同步" : "已同步"}</span>
+                  <span className="opacity-60">({syncStatusSummary.synced}/{syncStatusSummary.total})</span>
                 </div>
               )}
             </div>
@@ -870,155 +906,77 @@ export function FileList({ searchQuery }: FileListProps) {
               <div className="relative">
                 <button
                   onClick={() => setIsTypeDropdownOpen(!isTypeDropdownOpen)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                    isDark
-                      ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                      : "bg-slate-200 text-slate-600 hover:bg-slate-300"
-                  }`}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${isDark
+                    ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                    : "bg-slate-200 text-slate-600 hover:bg-slate-300"
+                    }`}
                 >
-                  <span>
-                    {selectedFileType === "all"
-                      ? "全部类型"
-                      : selectedFileType === "excel"
-                        ? "Excel"
-                        : selectedFileType === "dwg"
-                          ? "DWG"
-                          : selectedFileType === "ppt"
-                            ? "PowerPoint"
-                            : selectedFileType === "pdf"
-                              ? "PDF"
-                              : selectedFileType === "image"
-                                ? "图片"
-                                : "Word"}
-                  </span>
-                  <ChevronDown
-                    className={`h-3 w-3 transition-transform ${isTypeDropdownOpen ? "rotate-180" : ""}`}
-                  />
+                  <span>{selectedFileType === "all" ? "全部类型" : selectedFileType === "excel" ? "Excel" : selectedFileType === "dwg" ? "DWG" : selectedFileType === "ppt" ? "PowerPoint" : selectedFileType === "pdf" ? "PDF" : selectedFileType === "image" ? "图片" : "Word"}</span>
+                  <ChevronDown className={`h-3 w-3 transition-transform ${isTypeDropdownOpen ? "rotate-180" : ""}`} />
                 </button>
                 {isTypeDropdownOpen && (
-                  <div
-                    className={`absolute right-0 top-full z-10 mt-1 overflow-hidden rounded-lg shadow-lg border ${
-                      isDark
-                        ? "bg-slate-800 border-slate-700"
-                        : "bg-white border-slate-200"
-                    }`}
-                  >
+                  <div className={`absolute right-0 top-full z-10 mt-1 overflow-hidden rounded-lg shadow-lg border ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
+                    }`}>
                     <button
-                      onClick={() => {
-                        setSelectedFileType("all");
-                        setIsTypeDropdownOpen(false);
-                      }}
-                      className={`w-full px-4 py-2 text-left text-xs transition-colors ${
-                        selectedFileType === "all"
-                          ? isDark
-                            ? "bg-blue-500/20 text-blue-400"
-                            : "bg-blue-50 text-blue-600"
-                          : isDark
-                            ? "text-slate-300 hover:bg-slate-700"
-                            : "text-slate-700 hover:bg-slate-50"
-                      }`}
+                      onClick={() => { setSelectedFileType("all"); setIsTypeDropdownOpen(false); }}
+                      className={`w-full px-4 py-2 text-left text-xs transition-colors ${selectedFileType === "all"
+                        ? isDark ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600"
+                        : isDark ? "text-slate-300 hover:bg-slate-700" : "text-slate-700 hover:bg-slate-50"
+                        }`}
                     >
                       全部类型
                     </button>
                     <button
-                      onClick={() => {
-                        setSelectedFileType("dwg");
-                        setIsTypeDropdownOpen(false);
-                      }}
-                      className={`w-full px-4 py-2 text-left text-xs transition-colors ${
-                        selectedFileType === "dwg"
-                          ? isDark
-                            ? "bg-blue-500/20 text-blue-400"
-                            : "bg-blue-50 text-blue-600"
-                          : isDark
-                            ? "text-slate-300 hover:bg-slate-700"
-                            : "text-slate-700 hover:bg-slate-50"
-                      }`}
+                      onClick={() => { setSelectedFileType("dwg"); setIsTypeDropdownOpen(false); }}
+                      className={`w-full px-4 py-2 text-left text-xs transition-colors ${selectedFileType === "dwg"
+                        ? isDark ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600"
+                        : isDark ? "text-slate-300 hover:bg-slate-700" : "text-slate-700 hover:bg-slate-50"
+                        }`}
                     >
                       DWG (.dwg, .dxf)
                     </button>
                     <button
-                      onClick={() => {
-                        setSelectedFileType("excel");
-                        setIsTypeDropdownOpen(false);
-                      }}
-                      className={`w-full px-4 py-2 text-left text-xs transition-colors ${
-                        selectedFileType === "excel"
-                          ? isDark
-                            ? "bg-blue-500/20 text-blue-400"
-                            : "bg-blue-50 text-blue-600"
-                          : isDark
-                            ? "text-slate-300 hover:bg-slate-700"
-                            : "text-slate-700 hover:bg-slate-50"
-                      }`}
+                      onClick={() => { setSelectedFileType("excel"); setIsTypeDropdownOpen(false); }}
+                      className={`w-full px-4 py-2 text-left text-xs transition-colors ${selectedFileType === "excel"
+                        ? isDark ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600"
+                        : isDark ? "text-slate-300 hover:bg-slate-700" : "text-slate-700 hover:bg-slate-50"
+                        }`}
                     >
                       Excel (.xls, .xlsx)
                     </button>
                     <button
-                      onClick={() => {
-                        setSelectedFileType("word");
-                        setIsTypeDropdownOpen(false);
-                      }}
-                      className={`w-full px-4 py-2 text-left text-xs transition-colors ${
-                        selectedFileType === "word"
-                          ? isDark
-                            ? "bg-blue-500/20 text-blue-400"
-                            : "bg-blue-50 text-blue-600"
-                          : isDark
-                            ? "text-slate-300 hover:bg-slate-700"
-                            : "text-slate-700 hover:bg-slate-50"
-                      }`}
+                      onClick={() => { setSelectedFileType("word"); setIsTypeDropdownOpen(false); }}
+                      className={`w-full px-4 py-2 text-left text-xs transition-colors ${selectedFileType === "word"
+                        ? isDark ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600"
+                        : isDark ? "text-slate-300 hover:bg-slate-700" : "text-slate-700 hover:bg-slate-50"
+                        }`}
                     >
                       Word (.doc, .docx)
                     </button>
                     <button
-                      onClick={() => {
-                        setSelectedFileType("ppt");
-                        setIsTypeDropdownOpen(false);
-                      }}
-                      className={`w-full px-4 py-2 text-left text-xs transition-colors ${
-                        selectedFileType === "ppt"
-                          ? isDark
-                            ? "bg-blue-500/20 text-blue-400"
-                            : "bg-blue-50 text-blue-600"
-                          : isDark
-                            ? "text-slate-300 hover:bg-slate-700"
-                            : "text-slate-700 hover:bg-slate-50"
-                      }`}
+                      onClick={() => { setSelectedFileType("ppt"); setIsTypeDropdownOpen(false); }}
+                      className={`w-full px-4 py-2 text-left text-xs transition-colors ${selectedFileType === "ppt"
+                        ? isDark ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600"
+                        : isDark ? "text-slate-300 hover:bg-slate-700" : "text-slate-700 hover:bg-slate-50"
+                        }`}
                     >
                       PowerPoint (.ppt, .pptx)
                     </button>
                     <button
-                      onClick={() => {
-                        setSelectedFileType("pdf");
-                        setIsTypeDropdownOpen(false);
-                      }}
-                      className={`w-full px-4 py-2 text-left text-xs transition-colors ${
-                        selectedFileType === "pdf"
-                          ? isDark
-                            ? "bg-blue-500/20 text-blue-400"
-                            : "bg-blue-50 text-blue-600"
-                          : isDark
-                            ? "text-slate-300 hover:bg-slate-700"
-                            : "text-slate-700 hover:bg-slate-50"
-                      }`}
+                      onClick={() => { setSelectedFileType("pdf"); setIsTypeDropdownOpen(false); }}
+                      className={`w-full px-4 py-2 text-left text-xs transition-colors ${selectedFileType === "pdf"
+                        ? isDark ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600"
+                        : isDark ? "text-slate-300 hover:bg-slate-700" : "text-slate-700 hover:bg-slate-50"
+                        }`}
                     >
                       PDF (.pdf)
                     </button>
                     <button
-                      onClick={() => {
-                        setSelectedFileType("image");
-                        setIsTypeDropdownOpen(false);
-                      }}
-                      className={`w-full px-4 py-2 text-left text-xs transition-colors ${
-                        selectedFileType === "image"
-                          ? isDark
-                            ? "bg-blue-500/20 text-blue-400"
-                            : "bg-blue-50 text-blue-600"
-                          : isDark
-                            ? "text-slate-300 hover:bg-slate-700"
-                            : "text-slate-700 hover:bg-slate-50"
-                      }`}
+                      onClick={() => { setSelectedFileType("image"); setIsTypeDropdownOpen(false); }}
+                      className={`w-full px-4 py-2 text-left text-xs transition-colors ${selectedFileType === "image"
+                        ? isDark ? "bg-blue-500/20 text-blue-400" : "bg-blue-50 text-blue-600"
+                        : isDark ? "text-slate-300 hover:bg-slate-700" : "text-slate-700 hover:bg-slate-50"
+                        }`}
                     >
                       图片 (.jpg, .png, 等)
                     </button>
@@ -1028,11 +986,10 @@ export function FileList({ searchQuery }: FileListProps) {
 
               <button
                 onClick={() => loadDirectory(localPath)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  isDark
-                    ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/20"
-                    : "bg-blue-50 text-blue-600 hover:bg-blue-100"
-                }`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${isDark
+                  ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/20"
+                  : "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                  }`}
               >
                 刷新
               </button>
@@ -1100,94 +1057,85 @@ export function FileList({ searchQuery }: FileListProps) {
 
         <ToastComponent />
       </div>
-      {isCloneModalOpen &&
-        createPortal(
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div
-              className={`rounded-xl shadow-xl w-full max-w-md ${
-                isDark
-                  ? "bg-slate-800 text-slate-100"
-                  : "bg-white text-slate-900"
-              }`}
-            >
-              <div className="flex items-center justify-between p-4 border-b border-current/10">
-                <h3 className="text-lg font-semibold">克隆源目录到本地</h3>
-                <button
-                  onClick={() => setIsCloneModalOpen(false)}
-                  className="p-1 rounded hover:bg-current/10"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
+      {isCloneModalOpen && createPortal(
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className={`rounded-xl shadow-xl w-full max-w-md ${isDark ? "bg-slate-800 text-slate-100" : "bg-white text-slate-900"
+            }`}>
+            <div className="flex items-center justify-between p-4 border-b border-current/10">
+              <h3 className="text-lg font-semibold">克隆源目录到本地</h3>
+              <button
+                onClick={() => setIsCloneModalOpen(false)}
+                className="p-1 rounded hover:bg-current/10"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
 
-              <div className="p-4 space-y-4">
+            <div className="p-4 space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">选择要克隆的文件类型：</label>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">
-                    选择要克隆的文件类型：
-                  </label>
-                  <div className="space-y-2">
-                    {CLONE_TYPE_OPTIONS.map((option) => {
-                      const isSelected = cloneSelectedTypes.includes(option.id);
-                      const isAllSelected = cloneSelectedTypes.includes("all");
+                  {CLONE_TYPE_OPTIONS.map((option) => {
+                    const isSelected = cloneSelectedTypes.includes(option.id);
+                    const isAllSelected = cloneSelectedTypes.includes("all");
 
-                      return (
-                        <label
-                          key={option.id}
-                          className={`flex items-center gap-3 p-2 rounded-lg border cursor-pointer transition-colors ${
-                            isSelected
-                              ? isDark
-                                ? "bg-blue-500/20 border-blue-500/30"
-                                : "bg-blue-50 border-blue-200"
-                              : isDark
-                                ? "border-slate-600 hover:bg-slate-700/50"
-                                : "border-slate-200 hover:bg-slate-50"
-                          } ${
-                            option.id !== "all" && isAllSelected
-                              ? "opacity-50"
-                              : ""
+                    return (
+                      <label
+                        key={option.id}
+                        className={`flex items-center gap-3 p-2 rounded-lg border cursor-pointer transition-colors ${isSelected
+                          ? isDark
+                            ? "bg-blue-500/20 border-blue-500/30"
+                            : "bg-blue-50 border-blue-200"
+                          : isDark
+                            ? "border-slate-600 hover:bg-slate-700/50"
+                            : "border-slate-200 hover:bg-slate-50"
+                          } ${option.id !== "all" && isAllSelected ? "opacity-50" : ""
                           }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleCloneType(option.id)}
-                            className="h-4 w-4 rounded border-current/30 text-blue-600 focus:ring-blue-500/50"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium text-sm">
-                              {option.label}
-                            </div>
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleCloneType(option.id)}
+                          className="h-4 w-4 rounded border-current/30 text-blue-600 focus:ring-blue-500/50"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm">{option.label}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
-
-              <div className="flex items-center justify-end gap-2 p-4 border-t border-current/10">
-                <button
-                  onClick={() => setIsCloneModalOpen(false)}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    isDark
-                      ? "bg-slate-700 hover:bg-slate-600"
-                      : "bg-slate-100 hover:bg-slate-200"
-                  }`}
-                >
-                  取消
-                </button>
-                <button
-                  onClick={handleCloneWithFilter}
-                  disabled={loading || cloneSelectedTypes.length === 0}
-                  className="px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 font-medium transition-colors"
-                >
-                  {loading ? "克隆中..." : "开始克隆"}
-                </button>
-              </div>
             </div>
-          </div>,
-          document.body,
-        )}
+
+            <div className="flex items-center justify-end gap-2 p-4 border-t border-current/10">
+              <button
+                onClick={() => setIsCloneModalOpen(false)}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${isDark ? "bg-slate-700 hover:bg-slate-600" : "bg-slate-100 hover:bg-slate-200"
+                  }`}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCloneWithFilter}
+                disabled={loading || cloneSelectedTypes.length === 0}
+                className="px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 font-medium transition-colors"
+              >
+                {loading ? "克隆中..." : "开始克隆"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      <SyncReasonModal
+        isOpen={syncReasonModal.isOpen}
+        fileName={syncReasonModal.fileName}
+        onClose={() => setSyncReasonModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={handleConfirmSyncReason}
+        isDark={isDark}
+      />
     </>
   );
 }

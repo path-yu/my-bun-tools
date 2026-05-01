@@ -109,7 +109,7 @@ export type DrawingRPC = {
           y: number;
           zoomHeight?: number;
         };
-        response:any;
+        response: any;
       };
       selectDatabase: {
         params: {
@@ -138,11 +138,11 @@ export type DrawingRPC = {
         response: { success: boolean; path?: string; error?: string; canceled?: boolean };
       };
       updateFromSource: {
-        params: { sourcePath: string; localPath: string; fileName: string ,brandKey: CadBrand};
+        params: { sourcePath: string; localPath: string; fileName: string , brandKey: CadBrand, logData?: Omit<SyncLog, "id" | "createdAt" | "createdBy"> };
         response: { success: boolean; error?: string };
       };
       syncToSource: {
-        params: { sourcePath: string; localPath: string; fileName: string ,brandKey: CadBrand};
+        params: { sourcePath: string; localPath: string; fileName: string , brandKey: CadBrand, logData?: Omit<SyncLog, "id" | "createdAt" | "createdBy"> };
         response: { success: boolean; error?: string };
       };
       cloneDirectory: {
@@ -164,6 +164,14 @@ export type DrawingRPC = {
       stopWatchingDirectory: {
         params: { sourcePath: string };
         response: { success: boolean };
+      };
+      saveSyncLog: {
+        params: Omit<SyncLog, "id" | "createdAt" | "createdBy">;
+        response: { success: boolean; error?: string };
+      };
+      getSyncLogs: {
+        params: { sourcePath?: string };
+        response: { success: boolean; logs?: SyncLog[]; error?: string };
       };
     };
     messages: {
@@ -221,4 +229,18 @@ export interface FileInfo {
   isReadOnly: boolean;
   syncStatus?: "synced" | "modified" | "new" | "deleted" | "unknown";
   sourceModifiedAt?: string;
+}
+
+export type SyncReasonType = "modify" | "new" | "delete" | "custom";
+
+export interface SyncLog {
+  id: string;
+  fileName: string;
+  reasonType: SyncReasonType;
+  reason: string;
+  createdAt: string;
+  createdBy: string;
+  sourcePath: string;
+  localPath: string;
+  operation: "syncToSource" | "updateFromSource";
 }
