@@ -1,7 +1,6 @@
 import {
   BrowserWindow,
   Updater,
-	Utils,
 } from "electrobun/bun";
 import { drawingRPC } from "./drawingRpc";
 import { startCadServer } from "./server";
@@ -29,7 +28,7 @@ async function getMainViewUrl(): Promise<string> {
 // Create the main application window
 const url = await getMainViewUrl();
 
- new BrowserWindow({
+ let webView = new BrowserWindow({
   title: "Tools for drawing management",
   url,
    frame: {
@@ -41,7 +40,10 @@ const url = await getMainViewUrl();
   
   rpc: drawingRPC,
 });
-console.log('数据库保存路径:',Utils.paths.userData);
+export function omitFileChange(data: { fileName: string; }) {
+  // 这里可以添加处理逻辑，例如更新 UI 或者通知其他部分
+  webView.webview.rpc!.request.fileChange(data);
+}
 // 启动后台监听服务
 startCadServer();
 console.log("React Tailwind Vite app started!");

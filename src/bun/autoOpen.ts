@@ -3,6 +3,9 @@ import * as fs from "fs";
 import * as path from "path";
 import { CAD_MAP, type CadBrand } from "../lib/types";
 import * as os from "os";
+import { spawnSync } from "bun";
+import { join, dirname, basename } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
 
 function writeLog(message: string) {
   const logPath = path.join(os.tmpdir(), "cad-debug.log"); // 也可以指定固定目录
@@ -274,4 +277,192 @@ function executePowerShell(
       },
     );
   });
+}
+// 扩展接口，增加 ReadOnly 字段
+interface ZwDocument {
+  name: string;
+  path: string;
+  isReadOnly: boolean;
+  owner: string;
+}
+export function parseDwgPath(filePath: string) {
+  const dir = dirname(filePath);
+  const dwlPath = join(dir, basename(filePath).replace(/\.dwg$/i, ".dwl"));
+
+  // 判断 .dwl 是否存在
+  const hasDwl = existsSync(dwlPath);
+  let owner = "";
+  let isReadOnly = false; // 默认先假设不是只读
+  if (hasDwl) {
+    try {
+      const content = readFileSync(dwlPath, "utf8").split("\n");
+      owner = content[0]?.trim() || "未知";
+      // 如果 .dwl 存在，说明文件被打开了。通常情况下，只有打开文件的用户才有写权限。
+      isReadOnly = true; // 只要有 .dwl，就先标记为只读，后续可以根据 owner 进一步判断
+    } catch (e) {
+      owner = "正在访问...";
+    }
+  } else {
+    // 如果没有 .dwl 文件，说明这个文件在 CAD 里虽然列出来了，但并没有被真正锁定
+    isReadOnly = false; // 或者你可以选择在 map 里过滤掉这类数据
+  }
+  return {
+    name: basename(filePath),
+    path: filePath,
+    isReadOnly: isReadOnly,
+    owner: owner,
+  };
+}
+
+export function getZwCadFiles(cadBrand: CadBrand): ZwDocument[] {
+  const psCommand = `
+    try {
+      $zwcad = [Runtime.InteropServices.Marshal]::GetActiveObject("${cadBrand}.Application")
+      if ($zwcad -and $zwcad.Documents.Count -gt 0) {
+        $zwcad.Documents | Where-Object { $_.FullName -ne "" } | ForEach-Object { 
+          [PSCustomObject]@{ 
+            Name = $_.Name; 
+            Path = $_.FullName;
+            # 依然保留原始 ReadOnly 供参考
+            ComReadOnly = [bool]$_.ReadOnly 
+          } 
+        } | ConvertTo-Json
+      } else { "[]" }
+    } catch { "[]" }
+  `;
+
+  const { stdout } = spawnSync(["powershell", "-Command", psCommand]);
+  const output = new TextDecoder().decode(stdout).trim();
+  if (!output || output === "[]") return [];
+
+  const data = JSON.parse(output);
+  const rawList = Array.isArray(data) ? data : [data];
+
+  return rawList.map((item: any) => {
+    const filePath = item.Path;
+    const dir = dirname(filePath);
+    const dwlPath = join(dir, basename(filePath).replace(/\.dwg$/i, ".dwl"));
+
+    // 判断 .dwl 是否存在
+    const hasDwl = existsSync(dwlPath);
+    let owner = "";
+    let isReadOnly = item.ComReadOnly; // 默认先取 COM 的值
+
+    if (hasDwl) {
+      try {
+        const content = readFileSync(dwlPath, "utf8").split("\n");
+        owner = content[0]?.trim() || "未知";
+
+        // --- 核心逻辑变更 ---
+        // 如果存在 .dwl，说明文件被打开了。
+        // 如果 owner 不是当前用户，那对你来说肯定是 ReadOnly。
+        const currentUser = process.env.USERNAME || "";
+        if (owner !== currentUser) {
+          isReadOnly = true;
+        } else {
+          // 如果 owner 是你，通常是可写的，除非文件本身被系统设为了只读属性
+          isReadOnly = false;
+        }
+      } catch (e) {
+        owner = "正在访问...";
+      }
+    } else {
+      // 如果没有 .dwl 文件，说明这个文件在 CAD 里虽然列出来了，但并没有被真正锁定
+      isReadOnly = false; // 或者你可以选择在 map 里过滤掉这类数据
+    }
+
+    return {
+      name: item.Name,
+      path: item.Path,
+      isReadOnly: isReadOnly,
+      owner: owner,
+    };
+  }); // 进一步过滤：没有 owner 的（没 dwl 的）通常是无效残留记录
+}
+/**
+ * 切换中望CAD当前激活的图纸窗口
+ * @param fileNameOrPath 想要激活的文件名（如 "A.dwg"）或完整路径
+ */
+export function activateZwCadDocument(
+  cadBrand: CadBrand,
+  fileNameOrPath: string,
+): boolean {
+  // PowerShell 逻辑：
+  // 1. 获取 ZWCAD 实例
+  // 2. 遍历 Documents 集合寻找匹配项
+  // 3. 调用 .Activate() 方法
+  const psCommand = `
+    try {
+      $zwcad = [Runtime.InteropServices.Marshal]::GetActiveObject("${cadBrand}.Application")
+      $target = $null
+
+      # 寻找匹配的文档 (支持文件名或全路径匹配)
+      foreach ($doc in $zwcad.Documents) {
+        if ($doc.Name -eq "${fileNameOrPath}" -or $doc.FullName -eq "${fileNameOrPath}") {
+          $target = $doc
+          break
+        }
+      }
+
+      if ($target -ne $null) {
+        $target.Activate()
+        # 强制 CAD 窗口到前台（可选）
+        # $zwcad.WindowState = 3 # 3 代表最大化/正常显示
+        return $true
+      }
+      return $false
+    } catch {
+      return $false
+    }
+  `;
+
+  const { stdout } = spawnSync(["powershell", "-Command", psCommand]);
+  const result = new TextDecoder().decode(stdout).trim();
+
+  return result.toLowerCase() === "true";
+}
+/**
+ * 关闭中望CAD指定的图纸窗口
+ * @param fileNameOrPath 文件名或完整路径
+ * @param saveChanges 是否保存更改（默认为 false，即放弃更改直接关闭）
+ */
+export function closeZwCadDocument(data: {
+  fileNameOrPath: string;
+  saveChanges?: boolean;
+  cadBrand: CadBrand;
+}): boolean {
+  const { fileNameOrPath, saveChanges = true, cadBrand } = data;
+  // PowerShell 逻辑：
+  // 1. 找到匹配的 Document 对象
+  // 2. 调用 .Close($saveChanges)
+  // 注意：PowerShell 调用 COM 方法时，布尔值需要转为 [System.Boolean]
+  const psCommand = `
+    try {
+      $zwcad = [Runtime.InteropServices.Marshal]::GetActiveObject("${cadBrand}.Application")
+      $target = $null
+
+      foreach ($doc in $zwcad.Documents) {
+        if ($doc.Name -eq "${fileNameOrPath}" -or $doc.FullName -eq "${fileNameOrPath}") {
+          $target = $doc
+          break
+        }
+      }
+
+      if ($target -ne $null) {
+        # Close 方法第一个参数是 SaveChanges
+        # $true = 保存并关闭, $false = 不保存直接关闭
+        $save = if ("${saveChanges}" -eq "true") { $true } else { $false }
+        $target.Close($save)
+        return $true
+      }
+      return $false
+    } catch {
+      return $false
+    }
+  `;
+
+  const { stdout } = spawnSync(["powershell", "-Command", psCommand]);
+  const result = new TextDecoder().decode(stdout).trim();
+
+  return result.toLowerCase() === "true";
 }

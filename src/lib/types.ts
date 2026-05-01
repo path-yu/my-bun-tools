@@ -121,60 +121,68 @@ export type DrawingRPC = {
         params: {};
         response: { success: boolean; path?: string; error?: string; canceled?: boolean };
       };
-
+      selectDirectory: {
+        params: {};
+        response: { success: boolean; path?: string; error?: string; canceled?: boolean };
+      };
+      listDirectory: {
+        params: { path: string; sourcePath?: string };
+        response: { success: boolean; files?: FileInfo[]; error?: string };
+      };
+      selectSourceDirectory: {
+        params: {};
+        response: { success: boolean; path?: string; error?: string; canceled?: boolean };
+      };
+      selectLocalDirectory: {
+        params: {};
+        response: { success: boolean; path?: string; error?: string; canceled?: boolean };
+      };
+      updateFromSource: {
+        params: { sourcePath: string; localPath: string; fileName: string ,brandKey: CadBrand};
+        response: { success: boolean; error?: string };
+      };
+      syncToSource: {
+        params: { sourcePath: string; localPath: string; fileName: string ,brandKey: CadBrand};
+        response: { success: boolean; error?: string };
+      };
+      cloneDirectory: {
+        params: { sourcePath: string; localPath: string; allowedExtensions?: string[] };
+        response: { success: boolean; error?: string };
+      };
+      syncDirectory: {
+        params: { sourcePath: string; localPath: string };
+        response: { success: boolean; error?: string; syncCount?: number };
+      };
+      openFile: {
+        params: { filePath: string };
+        response: { success: boolean; error?: string };
+      };
+      startWatchingDirectory: {
+        params: { sourcePath: string; localPath: string };
+        response: { success: boolean; error?: string };
+      };
+      stopWatchingDirectory: {
+        params: { sourcePath: string };
+        response: { success: boolean };
+      };
     };
-    messages: {};
+    messages: {
+      fileChanged: {
+        data: { fileName: string; event: 'change' | 'rename' };
+      };
+    };
   }>;
-  webview: RPCSchema<{ requests: {}; messages: {} }>;
+  webview: RPCSchema<{ requests: {
+    fileChange:{
+      params: { fileName: string;  };
+      response: void;
+    },
+  }; messages: {
+    
+  } }>;
 };
 
-//  export type DrawingRPC = {
-// 	 bun: RPCSchema<{
-// 		 requests: {
-// 			 getAll: {
-// 				 params: {};
-// 				 response: Drawing[];
-// 			 };
-// 			 add: {
-// 				 // 排除自动生成的字段，其余字段作为参数
-// 				 params: Omit<Drawing, "id" | "created_at">;
-// 				 response: Drawing;
-// 			 };
-// 			 update: {
-// 				 params: Drawing;
-// 				 response: Drawing;
-// 			 };
-// 			 delete: {
-// 				 params: { id: number };
-// 				 response: { success: boolean };
-// 			 };
-// 			 locateInCad: {
-// 				 params: {
-// 					 cadType: CadBrand;
-// 					 dwgPath: string;
-// 					 x: number;
-// 					 y: number;
-// 					 zoomHeight?: number;
-// 				 };
-// 				 response: void;
-// 			 };
-// 			 professionalCadNavigate: {
-// 				 params: {
-// 					 brand: CadBrand;
-// 					 cadPath: string;
-// 					 materialCode: string;
-// 					 dwgPath: string;
-// 					 x: number;
-// 					 y: number;
-// 					 zoomHeight?: number;
-// 				 };
-// 				 response: void;
-// 			 };
-// 		 };
-// 		 messages: {};
-// 	 }>;
-// 	 webview: RPCSchema<{ requests: {}; messages: {} }>;
-//  };
+
 // 定义支持的 CAD 类型
 export type CadBrand = "ZWCAD" | "AutoCAD" | "GstarCAD";
 
@@ -201,3 +209,16 @@ export const CAD_MAP: Record<CadBrand, CadConfig> = {
     brandName: "浩辰CAD",
   },
 };
+
+export interface FileInfo {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  size: number;
+  createdAt: string;
+  modifiedAt: string;
+  extension: string;
+  isReadOnly: boolean;
+  syncStatus?: "synced" | "modified" | "new" | "deleted" | "unknown";
+  sourceModifiedAt?: string;
+}

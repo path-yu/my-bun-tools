@@ -1,35 +1,33 @@
 import { useState, useMemo, useEffect } from "react";
-import { Plus } from "lucide-react";
+import { FolderOpen, Database, X } from "lucide-react";
 import { Header } from "@/components/drawing-manager/header";
 import { SearchFilters } from "@/components/drawing-manager/search-filters";
 import { DrawingTable } from "@/components/drawing-manager/drawing-table";
 import { DrawingForm } from "@/components/drawing-manager/drawing-form";
-import { StatsCards } from "@/components/drawing-manager/stats-cards";
 import { SettingsModal } from "@/components/drawing-manager/settings-modal";
-import {
-  Drawing,
-  DrawingCategory,
-  DrawingFormData,
-  CADConfig,
-} from "@/lib/types";
+import { FileList } from "@/components/drawing-manager/file-list";
+import { Drawing, DrawingFormData, CADConfig } from "@/lib/types";
 import { getElectroView } from "@/lib/rpc";
+import { useAppTheme } from "@/components/ThemeContext";
 
 const DEFAULT_CAD_CONFIG: CADConfig = {
   type: "",
   path: "",
 };
 
+type ViewMode = "drawing" | "file";
+
 export default function DrawingManagerPage() {
+  const { isDark } = useAppTheme();
   const [drawings, setDrawings] = useState<Drawing[]>([]);
   const [drawingNumber, setDrawingNumber] = useState("");
   const [materialCode, setMaterialCode] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState<
-    DrawingCategory | ""
-  >("");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingDrawing, setEditingDrawing] = useState<Drawing | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [cadConfig, setCadConfig] = useState<CADConfig>(DEFAULT_CAD_CONFIG);
+  const [viewMode, setViewMode] = useState<ViewMode>("drawing");
+  const [fileSearchQuery, setFileSearchQuery] = useState("");
 
   const load = async () => {
     const electrobun = getElectroView();
@@ -109,6 +107,8 @@ export default function DrawingManagerPage() {
     localStorage.setItem("dbPath", path);
     load(); // 刷新数据以反映新的数据库内容
   };
+
+
   // 筛选图纸
   const filteredDrawings = useMemo(() => {
     return drawings.filter((drawing) => {
@@ -122,12 +122,9 @@ export default function DrawingManagerPage() {
             .toLowerCase()
             .includes(materialCode.toLowerCase())
         : true;
-      const matchesCategory = selectedCategory
-        ? drawing.fileName.includes(selectedCategory)
-        : true;
-      return matchesDrawingNumber && matchesMaterialCode && matchesCategory;
+      return matchesDrawingNumber && matchesMaterialCode;
     });
-  }, [drawings, drawingNumber, materialCode, selectedCategory]);
+  }, [drawings, drawingNumber, materialCode]);
 
   // 统计数据
   const stats = useMemo(() => {
@@ -142,19 +139,6 @@ export default function DrawingManagerPage() {
       ).length,
     };
   }, [drawings]);
-
-  // 搜索处理
-  const handleSearch = () => {
-    // 当前已通过 useMemo 实时筛选，此处可添加额外逻辑如日志记录
-    load();
-  };
-
-  // 重置筛选
-  const handleReset = () => {
-    setDrawingNumber("");
-    setMaterialCode("");
-    setSelectedCategory("");
-  };
 
   // 添加图纸
   const handleAddDrawing = (data: DrawingFormData) => {
@@ -208,54 +192,136 @@ export default function DrawingManagerPage() {
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <div className="space-y-6">
-          {/* 统计卡片 */}
-          <StatsCards
-            totalDrawings={stats.total}
-            stainlessCount={stats.stainless}
-            carbonCount={stats.carbon}
-            vacuumCount={stats.vacuum}
-          />
 
-          {/* 搜索筛选 */}
-          <SearchFilters
-            drawingNumber={drawingNumber}
-            materialCode={materialCode}
-            selectedCategory={selectedCategory}
-            onDrawingNumberChange={setDrawingNumber}
-            onMaterialCodeChange={setMaterialCode}
-            onCategoryChange={setSelectedCategory}
-            onSearch={handleSearch}
-            onReset={handleReset}
-          />
 
-          {/* 表格标题和添加按钮 */}
+          {/* 视图切换和操作栏 */}
           <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">
-                图纸列表
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                共 {filteredDrawings.length} 条记录
-              </p>
+            <div className="flex items-center gap-3">
+              <div
+                className={`inline-flex rounded-xl p-1 ${
+                  isDark ? "bg-slate-800" : "bg-slate-100"
+                }`}
+              >
+                <button
+                  onClick={() => setViewMode("drawing")}
+                  className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+                    viewMode === "drawing"
+                      ? isDark
+                        ? "bg-blue-500 text-white shadow"
+                        : "bg-white text-blue-600 shadow"
+                      : isDark
+                        ? "text-slate-400 hover:text-slate-200"
+                        : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  <Database className="h-4 w-4" />
+                  数据库视图
+                </button>
+                <button
+                  onClick={() => setViewMode("file")}
+                  className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+                    viewMode === "file"
+                      ? isDark
+                        ? "bg-blue-500 text-white shadow"
+                        : "bg-white text-blue-600 shadow"
+                      : isDark
+                        ? "text-slate-400 hover:text-slate-200"
+                        : "text-slate-500 hover:text-slate-700"
+                  }`}
+                >
+                  <FolderOpen className="h-4 w-4" />
+                  文件列表
+                </button>
+              </div>
+
+              {/* 搜索筛选 - 根据视图显示不同的搜索框 */}
+              {viewMode === "drawing" ? (
+                <SearchFilters
+                  drawingNumber={drawingNumber}
+                  materialCode={materialCode}
+                  onDrawingNumberChange={setDrawingNumber}
+                  onMaterialCodeChange={setMaterialCode}
+                />
+              ) : (
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="搜索文件名..."
+                    value={fileSearchQuery}
+                    onChange={(e) => setFileSearchQuery(e.target.value)}
+                    className={`h-10 w-64 rounded-lg border px-4 pr-10 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${
+                      isDark
+                        ? "bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-500"
+                        : "bg-white border-slate-200 text-slate-800 placeholder:text-slate-400"
+                    }`}
+                  />
+                  {fileSearchQuery && (
+                    <button
+                      onClick={() => setFileSearchQuery("")}
+                      className={`absolute right-3 top-1/2 -translate-y-1/2 ${
+                        isDark ? "text-slate-500" : "text-slate-400"
+                      }`}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
-            <button
-              onClick={handleOpenAdd}
-              className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-sm transition-all hover:bg-primary/90 active:scale-[0.98]"
-            >
-              <Plus className="h-4 w-4" />
-              添加图纸
-            </button>
+
           </div>
 
-          {/* 图纸表格 */}
-          <DrawingTable
-            drawings={filteredDrawings}
-            onEdit={handleOpenEdit}
-            cadConfig={cadConfig}
-            onDelete={() => {
-              load();
-            }}
-          />
+          {/* 内容区域 */}
+          <div className="relative min-h-[400px]">
+            <div
+              className={`absolute inset-0 transition-all duration-300 ease-in-out ${
+                viewMode === "drawing"
+                  ? "opacity-100 translate-y-0"
+                  : "opacity-0 -translate-y-4 pointer-events-none"
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground">
+                    图纸列表
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    共 {filteredDrawings.length} 条记录
+                  </p>
+                </div>
+              </div>
+              <DrawingTable
+                drawings={filteredDrawings}
+                onEdit={handleOpenEdit}
+                cadConfig={cadConfig}
+                onDelete={() => {
+                  load();
+                }}
+              />
+            </div>
+
+            <div
+              className={`absolute inset-0 transition-all duration-300 ease-in-out ${
+                viewMode === "file"
+                  ? "opacity-100 translate-y-0"
+                  : "opacity-0 -translate-y-4 pointer-events-none"
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground">
+                    文件列表
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    管理本地和共享目录的文件
+                  </p>
+                </div>
+              </div>
+              <FileList
+                searchQuery={fileSearchQuery}
+              />
+            </div>
+          </div>
         </div>
       </main>
 
