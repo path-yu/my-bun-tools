@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { Grow } from "@mui/material";
 import { ChevronDown } from "lucide-react";
 import { useAppTheme } from "@/components/ThemeContext";
 
@@ -58,7 +59,8 @@ export function SelectDropdown({ value, onChange, options, placeholder }: Select
         <span>{displayValue}</span>
         <ChevronDown className={`h-3 w-3 transition-transform ${isOpen ? "rotate-180" : ""}`} />
       </button>
-      {isOpen && (
+      <Grow style={{ transformOrigin: 'top right' }} // 设置动画起点
+  {...(isOpen ? { timeout: 200 } : {})} in={isOpen} timeout={200}>
         <div className={`absolute right-0 top-full z-10 mt-1 overflow-hidden rounded-lg shadow-lg border min-w-[180px] ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
           }`}>
           {options.map((option) => (
@@ -74,7 +76,7 @@ export function SelectDropdown({ value, onChange, options, placeholder }: Select
             </button>
           ))}
         </div>
-      )}
+      </Grow>
     </div>
   );
 }

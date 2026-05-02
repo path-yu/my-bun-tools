@@ -54,11 +54,15 @@ export const  initializeDb = async (customPath?: string) => {
     // 计数验证
     const count = _db.prepare("SELECT COUNT(*) as c FROM drawings").get() as { c: number };
     console.log(`[DB] 当前记录数：${count.c}`);
-
   } catch (err) {
     console.error("[DB] 初始化失败", err);
     _db = null;
   }
+};
+
+// 获取当前数据库路径
+export const getDbPath = (): string => {
+  return _db?.filename || "";
 };
 
 // --- 4. 安全 SQL 工具 ---

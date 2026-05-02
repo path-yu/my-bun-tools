@@ -11,9 +11,9 @@ createRoot(document.getElementById("root")!).render(
     <>
       {/* <Analytics /> */}
       <ConfigProvider>
-        <ThemeProvider>
-          <App />
-        </ThemeProvider>
+          <ThemeProvider>
+            <App />
+          </ThemeProvider>
       </ConfigProvider>
     </>
   </StrictMode>,

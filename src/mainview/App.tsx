@@ -1,12 +1,11 @@
 import { useState, useMemo, useEffect } from "react";
 import { FolderOpen, Database, X, History } from "lucide-react";
 import { Header } from "@/components/drawing-manager/header";
-import { SearchFilters } from "@/components/drawing-manager/search-filters";
 import { DrawingTable } from "@/components/drawing-manager/drawing-table";
 import { DrawingForm } from "@/components/drawing-manager/drawing-form";
 import { SettingsModal } from "@/components/drawing-manager/settings-modal";
-import { FileList } from "@/components/drawing-manager/file-list";
-import { LogList } from "@/components/drawing-manager/log-list";
+import { FileList } from "@/components/file-list/file-list";
+import { LogList } from "@/components/log-list";
 import { Drawing, DrawingFormData, CADConfig } from "@/lib/types";
 import { getElectroView } from "@/lib/rpc";
 import { useAppTheme } from "@/components/ThemeContext";
@@ -21,8 +20,6 @@ type ViewMode = "drawing" | "file" | "log";
 export default function DrawingManagerPage() {
   const { isDark } = useAppTheme();
   const [drawings, setDrawings] = useState<Drawing[]>([]);
-  const [drawingNumber, setDrawingNumber] = useState("");
-  const [materialCode, setMaterialCode] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingDrawing, setEditingDrawing] = useState<Drawing | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -50,14 +47,21 @@ export default function DrawingManagerPage() {
         fileName: fileName, // 动态添加 fileName 字段
       };
     });
-    console.log(processedList,3);
-
     setDrawings(processedList);
+  };
+  const loadDefaultCadConfig = async () => {
+    const electrobun = getElectroView();
+    const config = await electrobun.rpc!.request.getCadConfig({});
+    setCadConfig(config);
+
+  };
+  const loadDbPath = async () => {
+    const electrobun = getElectroView();
+    const defaultDbPath = await electrobun.rpc!.request.getDbPath({});
+    localStorage.setItem("dbPath", defaultDbPath);
   };
   // 初始化主题和CAD配置
   useEffect(() => {
-    console.log("render");
-
     // 加载主题
     const savedTheme = localStorage.getItem("theme");
     const prefersDark = window.matchMedia(
@@ -71,6 +75,9 @@ export default function DrawingManagerPage() {
     // 加载CAD配置
     const savedCADConfig = localStorage.getItem("cadConfig");
     const savedDbPath = localStorage.getItem("dbPath");
+    if (!savedCADConfig) {
+      loadDefaultCadConfig();
+    }
     if (savedDbPath) {
       getElectroView()
         .rpc!.request.selectDatabase({ path: savedDbPath })
@@ -85,7 +92,9 @@ export default function DrawingManagerPage() {
         .catch((err) => {
           console.error("调用 selectDatabase RPC 失败:", err);
         });
+
     } else {
+      loadDbPath();
       load(); // 没有保存的数据库路径，直接加载默认数据
     }
     if (savedCADConfig) {
@@ -110,37 +119,6 @@ export default function DrawingManagerPage() {
     load(); // 刷新数据以反映新的数据库内容
   };
 
-
-  // 筛选图纸
-  const filteredDrawings = useMemo(() => {
-    return drawings.filter((drawing) => {
-      const matchesDrawingNumber = drawingNumber
-        ? drawing.drawingNumber
-            .toLowerCase()
-            .includes(drawingNumber.toLowerCase())
-        : true;
-      const matchesMaterialCode = materialCode
-        ? drawing.materialCode
-            .toLowerCase()
-            .includes(materialCode.toLowerCase())
-        : true;
-      return matchesDrawingNumber && matchesMaterialCode;
-    });
-  }, [drawings, drawingNumber, materialCode]);
-
-  // 统计数据
-  const stats = useMemo(() => {
-    return {
-      total: drawings.length,
-      stainless: drawings.filter((d) => d.fileName === "不锈钢").length,
-      carbon: drawings.filter((d) => d.fileName === "碳钢").length,
-      vacuum: drawings.filter((d) => d.fileName === "真空罐").length,
-      // 卧式储气罐新标准
-      horizontalVacuum: drawings.filter((d) =>
-        d.fileName?.includes("卧式储气罐新标准"),
-      ).length,
-    };
-  }, [drawings]);
 
   // 添加图纸
   const handleAddDrawing = (data: DrawingFormData) => {
@@ -182,11 +160,6 @@ export default function DrawingManagerPage() {
     setIsFormOpen(true);
   };
 
-  // 打开添加表单
-  const handleOpenAdd = () => {
-    setEditingDrawing(null);
-    setIsFormOpen(true);
-  };
 
   return (
     <div className="min-h-screen bg-background overflow-hidden">
@@ -200,51 +173,47 @@ export default function DrawingManagerPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div
-                className={`inline-flex rounded-xl p-1 ${
-                  isDark ? "bg-slate-800" : "bg-slate-100"
-                }`}
+                className={`inline-flex rounded-xl p-1 ${isDark ? "bg-slate-800" : "bg-slate-100"
+                  }`}
               >
                 <button
                   onClick={() => setViewMode("drawing")}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
-                    viewMode === "drawing"
+                  className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${viewMode === "drawing"
                       ? isDark
                         ? "bg-blue-500 text-white shadow"
                         : "bg-white text-blue-600 shadow"
                       : isDark
                         ? "text-slate-400 hover:text-slate-200"
                         : "text-slate-500 hover:text-slate-700"
-                  }`}
+                    }`}
                 >
                   <Database className="h-4 w-4" />
                   数据库视图
                 </button>
                 <button
                   onClick={() => setViewMode("file")}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
-                    viewMode === "file"
+                  className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${viewMode === "file"
                       ? isDark
                         ? "bg-blue-500 text-white shadow"
                         : "bg-white text-blue-600 shadow"
                       : isDark
                         ? "text-slate-400 hover:text-slate-200"
                         : "text-slate-500 hover:text-slate-700"
-                  }`}
+                    }`}
                 >
                   <FolderOpen className="h-4 w-4" />
                   文件列表
                 </button>
                 <button
                   onClick={() => setViewMode("log")}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
-                    viewMode === "log"
+                  className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${viewMode === "log"
                       ? isDark
                         ? "bg-blue-500 text-white shadow"
                         : "bg-white text-blue-600 shadow"
                       : isDark
                         ? "text-slate-400 hover:text-slate-200"
                         : "text-slate-500 hover:text-slate-700"
-                  }`}
+                    }`}
                 >
                   <History className="h-4 w-4" />
                   同步日志
@@ -253,12 +222,7 @@ export default function DrawingManagerPage() {
 
               {/* 搜索筛选 - 根据视图显示不同的搜索框 */}
               {viewMode === "drawing" ? (
-                <SearchFilters
-                  drawingNumber={drawingNumber}
-                  materialCode={materialCode}
-                  onDrawingNumberChange={setDrawingNumber}
-                  onMaterialCodeChange={setMaterialCode}
-                />
+                null
               ) : viewMode === "file" ? (
                 <div className="relative">
                   <input
@@ -266,18 +230,16 @@ export default function DrawingManagerPage() {
                     placeholder="搜索文件名..."
                     value={fileSearchQuery}
                     onChange={(e) => setFileSearchQuery(e.target.value)}
-                    className={`h-10 w-64 rounded-lg border px-4 pr-10 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${
-                      isDark
+                    className={`h-10 w-64 rounded-lg border px-4 pr-10 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${isDark
                         ? "bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-500"
                         : "bg-white border-slate-200 text-slate-800 placeholder:text-slate-400"
-                    }`}
+                      }`}
                   />
                   {fileSearchQuery && (
                     <button
                       onClick={() => setFileSearchQuery("")}
-                      className={`absolute right-3 top-1/2 -translate-y-1/2 ${
-                        isDark ? "text-slate-500" : "text-slate-400"
-                      }`}
+                      className={`absolute right-3 top-1/2 -translate-y-1/2 ${isDark ? "text-slate-500" : "text-slate-400"
+                        }`}
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -290,24 +252,13 @@ export default function DrawingManagerPage() {
           {/* 内容区域 */}
           <div className="relative min-h-[400px]">
             <div
-              className={`absolute inset-0 transition-all duration-300 ease-in-out ${
-                viewMode === "drawing"
+              className={`absolute inset-0 transition-all duration-300 ease-in-out ${viewMode === "drawing"
                   ? "opacity-100 translate-y-0"
                   : "opacity-0 -translate-y-4 pointer-events-none"
-              }`}
+                }`}
             >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-foreground">
-                    图纸列表
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    共 {filteredDrawings.length} 条记录
-                  </p>
-                </div>
-              </div>
               <DrawingTable
-                drawings={filteredDrawings}
+                drawings={drawings}
                 onEdit={handleOpenEdit}
                 cadConfig={cadConfig}
                 onDelete={() => {
@@ -317,11 +268,10 @@ export default function DrawingManagerPage() {
             </div>
 
             <div
-              className={`absolute inset-0 transition-all duration-300 ease-in-out ${
-                viewMode === "file"
+              className={`absolute inset-0 transition-all duration-300 ease-in-out ${viewMode === "file"
                   ? "opacity-100 translate-y-0"
                   : "opacity-0 -translate-y-4 pointer-events-none"
-              }`}
+                }`}
             >
               <div className="flex items-center justify-between">
                 <div>
@@ -341,11 +291,10 @@ export default function DrawingManagerPage() {
             </div>
 
             <div
-              className={`absolute inset-0 transition-all duration-300 ease-in-out ${
-                viewMode === "log"
+              className={`absolute inset-0 transition-all duration-300 ease-in-out ${viewMode === "log"
                   ? "opacity-100 translate-y-0"
                   : "opacity-0 -translate-y-4 pointer-events-none"
-              }`}
+                }`}
             >
               <div className="flex items-center justify-between">
                 <div>

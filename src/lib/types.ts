@@ -31,48 +31,19 @@ export interface CADConfig {
   type: CADType |"";
   path: string;
 }
-//   bun: RPCSchema<{
-//     requests: {
-//       getAll: {
-//         params: {};
-//         response: Drawing[];
-//       };
-//       add: {
-//         params: Omit<Drawing, "id" | "created_at">;
-//         response: Drawing;
-//       };
-//       update: {
-//         params: Drawing;
-//         response: Drawing;
-//       };
-//       delete: {
-//         params: { id: number };
-//         response: { success: boolean };
-//       };
-//       locateInCad: {
-//         params: { cadType: CADType; x: number; y: number };
-//         response: void;
-//       };
-//       professionalCadNavigate: {
-//         params: {
-//           brand: CadBrand;
-//           cadPath: string;
-//           materialCode: string;
-//           dwgPath: string;
-//           x: number;
-//           y: number;
-//           zoomHeight?: number;
-//         };
-//         response: void;
-//       };
-//     };
-//     messages: {};
-//   }>;
-//   webview: RPCSchema<{ requests: {}; messages: {} }>;
-// };
 export type DrawingRPC = {
   bun: RPCSchema<{
     requests: {
+      // getDbPath 获取当前数据库路径
+      getDbPath: {
+        params: {};
+        response: string;
+      };
+      // 获取当前用户的cad配置
+      getCadConfig: {
+        params: {};
+        response: {path:string,type:CADType};
+      };
       getAll: {
         params: {};
         response: Drawing[];
@@ -184,13 +155,13 @@ export type DrawingRPC = {
     };
     messages: {
       fileChanged: {
-        data: { fileName: string; event: 'change' | 'rename' };
+        data: { fileName: string; isLocalChange: boolean };
       };
     };
   }>;
   webview: RPCSchema<{ requests: {
     fileChange:{
-      params: { fileName: string;  };
+      params: { fileName: string;isLocalChange: boolean };
       response: void;
     },
   }; messages: {

@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useState, useCallback, } from "react";
 import { DataGrid, GridColDef, GridRenderCellParams } from "@mui/x-data-grid";
-import { ThemeProvider, createTheme, Box, Modal, Typography, TextField, Button } from "@mui/material";
+import { ThemeProvider, Box, Modal, Typography, Button, } from "@mui/material";
 import { FileText, Folder, FolderOpen, Search, Download, Upload, X, RefreshCw } from "lucide-react";
 import { FileInfo, SyncReasonType } from "@/lib/types";
 import { eventBus, getElectroView } from "@/lib/rpc";
 import { useAppTheme } from "@/components/ThemeContext";
 import { useToast } from "../useToast";
+import { Fade } from "@mui/material";
 import { readCadConfig } from "@/lib/utils";
-import { SelectDropdown } from "./SelectDropdown";
+import { SelectDropdown } from "../SelectDropdown";
+import { SyncReasonModal } from "./SyncReasonModal";
+import zhCN from "@/lib/locale";
+import { useDataGridTheme } from "../useDataGrid";
+
 interface FileListProps {
   searchQuery: string;
   sourcePath?: string;
@@ -93,190 +98,7 @@ const CLONE_TYPE_OPTIONS: Array<{ id: FileType; label: string; extensions: strin
   { id: "image", label: "图片文件 (.jpg, .png, 等)", extensions: ["jpg", "jpeg", "png", "gif", "bmp"] },
 ];
 
-interface SyncReasonModalProps {
-  isOpen: boolean;
-  fileName: string;
-  onClose: () => void;
-  onConfirm: (reasonType: SyncReasonType, reason: string) => void;
-}
 
-function SyncReasonModal({ isOpen, fileName, onClose, onConfirm }: SyncReasonModalProps) {
-  const { isDark } = useAppTheme();
-  const [selectedReasonType, setSelectedReasonType] = useState<SyncReasonType>("modify");
-  const [customReason, setCustomReason] = useState("");
-
-  const reasonOptions = [
-    { value: "modify" as SyncReasonType, label: "图纸修改" },
-    { value: "new" as SyncReasonType, label: "上传新图纸" },
-    { value: "delete" as SyncReasonType, label: "删除图纸" },
-    { value: "custom" as SyncReasonType, label: "自定义原因" },
-  ];
-
-  const handleConfirm = () => {
-    const reason = selectedReasonType === "custom" ? customReason : reasonOptions.find(o => o.value === selectedReasonType)?.label || "";
-    onConfirm(selectedReasonType, reason);
-  };
-
-  return (
-    <Modal
-      open={isOpen}
-      onClose={onClose}
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      <Box sx={{
-        bgcolor: isDark ? '#1e293b' : '#ffffff',
-        borderRadius: '12px',
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-        width: '100%',
-        maxWidth: 440,
-        outline: 'none',
-        p: 0,
-      }}>
-        <Box sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          p: 2,
-          borderBottom: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
-        }}>
-          <Typography variant="h6" component="h3" sx={{ fontWeight: 600, color: isDark ? '#e2e8f0' : '#1e293b' }}>
-            同步原因
-          </Typography>
-          <Button
-            onClick={onClose}
-            sx={{ minWidth: 'auto', p: 0.5, borderRadius: 1, color: isDark ? '#94a3b8' : '#64748b' }}
-          >
-            <X className="h-5 w-5" />
-          </Button>
-        </Box>
-
-        <Box sx={{ p: 2 }}>
-          <Typography variant="body2" sx={{ mb: 2, color: isDark ? '#94a3b8' : '#64748b' }}>
-            正在同步文件: <Box component="span" sx={{ fontWeight: 500, color: isDark ? '#e2e8f0' : '#1e293b' }}>{fileName}</Box>
-          </Typography>
-
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="body2" sx={{ mb: 1, fontWeight: 500, color: isDark ? '#e2e8f0' : '#1e293b' }}>
-              请选择同步原因:
-            </Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              {reasonOptions.map((option) => (
-                <Box
-                  key={option.value}
-                  onClick={() => setSelectedReasonType(option.value)}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1.5,
-                    p: 1.5,
-                    borderRadius: 1,
-                    border: 1,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                    borderColor: selectedReasonType === option.value
-                      ? '#3b82f6'
-                      : isDark ? '#334155' : '#e2e8f0',
-                    bgcolor: selectedReasonType === option.value
-                      ? '#3b82f6'
-                      : 'transparent',
-                    color: selectedReasonType === option.value
-                      ? 'white'
-                      : isDark ? '#e2e8f0' : '#1e293b',
-                    '&:hover': {
-                      bgcolor: selectedReasonType === option.value
-                        ? '#2563eb'
-                        : isDark ? '#334155' : '#f1f5f9',
-                    },
-                  }}
-                >
-                  <Box
-                    component="input"
-                    type="radio"
-                    checked={selectedReasonType === option.value}
-                    onChange={() => setSelectedReasonType(option.value)}
-                    sx={{
-                      width: 16,
-                      height: 16,
-                      accentColor: selectedReasonType === option.value ? 'white' : '#3b82f6',
-                    }}
-                  />
-                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                    {option.label}
-                  </Typography>
-                </Box>
-              ))}
-            </Box>
-          </Box>
-
-          {selectedReasonType === "custom" && (
-            <TextField
-              fullWidth
-              multiline
-              rows={3}
-              placeholder="请输入同步原因..."
-              value={customReason}
-              onChange={(e) => setCustomReason(e.target.value)}
-              sx={{
-                mt: 1,
-                '& .MuiOutlinedInput-root': {
-                  bgcolor: isDark ? '#0f172a' : '#f8fafc',
-                  '& fieldset': {
-                    borderColor: isDark ? '#334155' : '#e2e8f0',
-                  },
-                },
-                '& .MuiInputBase-input': {
-                  color: isDark ? '#e2e8f0' : '#1e293b',
-                },
-                '& .MuiInputBase-input::placeholder': {
-                  color: isDark ? '#64748b' : '#94a3b8',
-                },
-              }}
-            />
-          )}
-        </Box>
-
-        <Box sx={{
-          display: 'flex',
-          justifyContent: 'flex-end',
-          gap: 1,
-          p: 2,
-          borderTop: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
-        }}>
-          <Button
-            variant="outlined"
-            onClick={onClose}
-            sx={{ 
-              color: isDark ? '#e2e8f0' : '#1e293b',
-              borderColor: isDark ? '#334155' : '#e2e8f0',
-              '&:hover': {
-                bgcolor: isDark ? '#334155' : '#f1f5f9',
-                borderColor: isDark ? '#475569' : '#cbd5e1',
-              },
-            }}
-          >
-            取消
-          </Button>
-          <Button
-            variant="contained"
-            onClick={handleConfirm}
-            disabled={selectedReasonType === "custom" && !customReason.trim()}
-            sx={{ 
-              bgcolor: '#3b82f6',
-              '&:hover': { bgcolor: '#2563eb' },
-              '&:disabled': { bgcolor: '#64748b', cursor: 'not-allowed' },
-            }}
-          >
-            确认同步
-          </Button>
-        </Box>
-      </Box>
-    </Modal>
-  );
-}
 
 export function FileList({ searchQuery, sourcePath: propSourcePath, onSourcePathChange }: FileListProps) {
   const { isDark } = useAppTheme();
@@ -728,47 +550,7 @@ export function FileList({ searchQuery, sourcePath: propSourcePath, onSourcePath
     }
   };
 
-  const theme = useMemo(
-    () =>
-      createTheme({
-        palette: {
-          mode: isDark ? "dark" : "light",
-          primary: { main: "#3b82f6" },
-          background: {
-            default: isDark ? "#0f172a" : "#ffffff",
-            paper: isDark ? "#1e293b" : "#ffffff",
-          },
-        },
-        components: {
-          MuiDataGrid: {
-            styleOverrides: {
-              root: {
-                border: isDark ? "1px solid #1e293b" : "1px solid #e2e8f0",
-                borderRadius: "12px",
-                overflow: "hidden",
-                backgroundColor: isDark ? "#0f172a" : "#ffffff",
-              },
-              columnHeader: {
-                color: isDark ? "#cbd5e1" : "#475569",
-                fontWeight: 600,
-                fontSize: "13px",
-              },
-              cell: {
-                borderBottom: isDark ? "1px solid #1e293b" : "1px solid #f1f5f9",
-                color: isDark ? "#e2e8f0" : "#334155",
-                fontSize: "13px",
-              },
-              row: {
-                "&:hover": {
-                  backgroundColor: isDark ? "rgba(59, 130, 246, 0.1)" : "#f8fafc",
-                },
-              },
-            },
-          },
-        },
-      }),
-    [isDark],
-  );
+  const theme = useDataGridTheme(isDark);
 
   const columns: GridColDef[] = [
     {
@@ -1115,7 +897,7 @@ export function FileList({ searchQuery, sourcePath: propSourcePath, onSourcePath
           <ThemeProvider theme={theme}>
             <Box
               sx={{
-                height: "calc(100vh - 320px)",
+                height: "calc(100vh - 350px)",
                 width: "100%",
                 bgcolor: "background.paper",
                 borderRadius: "16px",
@@ -1130,6 +912,7 @@ export function FileList({ searchQuery, sourcePath: propSourcePath, onSourcePath
                 initialState={{
                   pagination: { paginationModel: { pageSize: 100 } },
                 }}
+                localeText={zhCN}
                 pageSizeOptions={[50, 100, 200]}
                 disableRowSelectionOnClick
                 rowHeight={48}
@@ -1174,123 +957,125 @@ export function FileList({ searchQuery, sourcePath: propSourcePath, onSourcePath
           justifyContent: 'center',
         }}
       >
-        <Box sx={{
-          bgcolor: isDark ? '#1e293b' : '#ffffff',
-          borderRadius: '12px',
-          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-          width: '100%',
-          maxWidth: 440,
-          outline: 'none',
-          p: 0,
-        }}>
+        <Fade timeout={250} in={isCloneModalOpen}>
           <Box sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            p: 2,
-            borderBottom: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
+            bgcolor: isDark ? '#1e293b' : '#ffffff',
+            borderRadius: '12px',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+            width: '100%',
+            maxWidth: 440,
+            outline: 'none',
+            p: 0,
           }}>
-            <Typography variant="h6" component="h3" sx={{ fontWeight: 600, color: isDark ? '#e2e8f0' : '#1e293b' }}>
-              克隆源目录到本地
-            </Typography>
-            <Button
-              onClick={() => setIsCloneModalOpen(false)}
-              sx={{ minWidth: 'auto', p: 0.5, borderRadius: 1, color: isDark ? '#94a3b8' : '#64748b' }}
-            >
-              <X className="h-5 w-5" />
-            </Button>
-          </Box>
-
-          <Box sx={{ p: 2 }}>
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="body2" sx={{ mb: 1, fontWeight: 500, color: isDark ? '#e2e8f0' : '#1e293b' }}>
-                选择要克隆的文件类型：
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              p: 2,
+              borderBottom: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
+            }}>
+              <Typography variant="h6" component="h3" sx={{ fontWeight: 600, color: isDark ? '#e2e8f0' : '#1e293b' }}>
+                克隆源目录到本地
               </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {CLONE_TYPE_OPTIONS.map((option) => {
-                  const isSelected = cloneSelectedTypes.includes(option.id);
-                  const isAllSelected = cloneSelectedTypes.includes("all");
+              <Button
+                onClick={() => setIsCloneModalOpen(false)}
+                sx={{ minWidth: 'auto', p: 0.5, borderRadius: 1, color: isDark ? '#94a3b8' : '#64748b' }}
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </Box>
 
-                  return (
-                    <Box
-                      key={option.id}
-                      onClick={() => toggleCloneType(option.id)}
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 1.5,
-                        p: 1.5,
-                        borderRadius: 1,
-                        border: 1,
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        opacity: option.id !== "all" && isAllSelected ? 0.5 : 1,
-                        borderColor: isSelected ? '#3b82f6' : isDark ? '#334155' : '#e2e8f0',
-                        bgcolor: isSelected ? '#3b82f6' : 'transparent',
-                        color: isSelected ? 'white' : isDark ? '#e2e8f0' : '#1e293b',
-                        '&:hover': {
-                          bgcolor: isSelected ? '#2563eb' : isDark ? '#334155' : '#f1f5f9',
-                        },
-                      }}
-                    >
+            <Box sx={{ p: 2 }}>
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" sx={{ mb: 1, fontWeight: 500, color: isDark ? '#e2e8f0' : '#1e293b' }}>
+                  选择要克隆的文件类型：
+                </Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {CLONE_TYPE_OPTIONS.map((option) => {
+                    const isSelected = cloneSelectedTypes.includes(option.id);
+                    const isAllSelected = cloneSelectedTypes.includes("all");
+
+                    return (
                       <Box
-                        component="input"
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleCloneType(option.id)}
+                        key={option.id}
+                        onClick={() => toggleCloneType(option.id)}
                         sx={{
-                          width: 16,
-                          height: 16,
-                          accentColor: '#3b82f6',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1.5,
+                          p: 1.5,
+                          borderRadius: 1,
+                          border: 1,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          opacity: option.id !== "all" && isAllSelected ? 0.5 : 1,
+                          borderColor: isSelected ? '#3b82f6' : isDark ? '#334155' : '#e2e8f0',
+                          bgcolor: isSelected ? '#3b82f6' : 'transparent',
+                          color: isSelected ? 'white' : isDark ? '#e2e8f0' : '#1e293b',
+                          '&:hover': {
+                            bgcolor: isSelected ? '#2563eb' : isDark ? '#334155' : '#f1f5f9',
+                          },
                         }}
-                      />
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                          {option.label}
-                        </Typography>
+                      >
+                        <Box
+                          component="input"
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleCloneType(option.id)}
+                          sx={{
+                            width: 16,
+                            height: 16,
+                            accentColor: '#3b82f6',
+                          }}
+                        />
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            {option.label}
+                          </Typography>
+                        </Box>
                       </Box>
-                    </Box>
-                  );
-                })}
+                    );
+                  })}
+                </Box>
               </Box>
             </Box>
-          </Box>
 
-          <Box sx={{
-            display: 'flex',
-            justifyContent: 'flex-end',
-            gap: 1,
-            p: 2,
-            borderTop: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
-          }}>
-            <Button
-              variant="outlined"
-              onClick={() => setIsCloneModalOpen(false)}
-              sx={{ 
-                color: isDark ? '#e2e8f0' : '#1e293b',
-                borderColor: isDark ? '#334155' : '#e2e8f0',
-                '&:hover': {
-                  bgcolor: isDark ? '#334155' : '#f1f5f9',
-                  borderColor: isDark ? '#475569' : '#cbd5e1',
-                },
-              }}
-            >
-              取消
-            </Button>
-            <Button
-              variant="contained"
-              onClick={handleCloneWithFilter}
-              disabled={loading || cloneSelectedTypes.length === 0}
-              sx={{ 
-                bgcolor: '#9333ea',
-                '&:hover': { bgcolor: '#7c3aed' },
-                '&:disabled': { bgcolor: '#64748b', cursor: 'not-allowed' },
-              }}
-            >
-              {loading ? "克隆中..." : "开始克隆"}
-            </Button>
+            <Box sx={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: 1,
+              p: 2,
+              borderTop: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
+            }}>
+              <Button
+                variant="outlined"
+                onClick={() => setIsCloneModalOpen(false)}
+                sx={{
+                  color: isDark ? '#e2e8f0' : '#1e293b',
+                  borderColor: isDark ? '#334155' : '#e2e8f0',
+                  '&:hover': {
+                    bgcolor: isDark ? '#334155' : '#f1f5f9',
+                    borderColor: isDark ? '#475569' : '#cbd5e1',
+                  },
+                }}
+              >
+                取消
+              </Button>
+              <Button
+                variant="contained"
+                onClick={handleCloneWithFilter}
+                disabled={loading || cloneSelectedTypes.length === 0}
+                sx={{
+                  bgcolor: '#9333ea',
+                  '&:hover': { bgcolor: '#7c3aed' },
+                  '&:disabled': { bgcolor: '#64748b', cursor: 'not-allowed' },
+                }}
+              >
+                {loading ? "克隆中..." : "开始克隆"}
+              </Button>
+            </Box>
           </Box>
-        </Box>
+        </Fade>
       </Modal>
 
       <SyncReasonModal

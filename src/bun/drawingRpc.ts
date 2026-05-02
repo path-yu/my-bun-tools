@@ -18,10 +18,22 @@ import * as path from "node:path";
 import { watch, type FSWatcher } from "node:fs";
 import { omitFileChange } from ".";
 import * as os from "os";
+import { getDbPath } from "./db";
+import { getDefaultDwgApp } from "../lib/utils-for-bun";
 
 export type DrawingRPC = {
   bun: RPCSchema<{
     requests: {
+      // getDbPath 获取当前数据库路径
+      getDbPath: {
+        params: {};
+        response: string;
+      };
+      // 获取当前用户的cad配置
+      getCadConfig: {
+        params: {};
+        response: {path:string,type:string};
+      };
       getAll: {
         params: {};
         response: Drawing[];
@@ -191,7 +203,7 @@ export type DrawingRPC = {
   webview: RPCSchema<{
     requests: {
       fileChange: {
-        params: { fileName: string };
+        params: { fileName: string,isLocalChange: boolean };
         response: void;
       };
     };
@@ -496,6 +508,15 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
   maxRequestTime: 6000,
   handlers: {
     requests: {
+      // getDbPath 获取当前数据库路径
+      getDbPath: () => {
+        return getDbPath();
+      },
+      // 获取当前用户的cad配置
+      getCadConfig: async () => {
+        const result = await getDefaultDwgApp();
+        return result || { type: "", path: "" };
+      },
       getAll: () => {
         const data = drawingSql.getAll();
         return data;
@@ -546,7 +567,6 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
             canChooseDirectory: false,
             allowsMultipleSelection: true,
           });
-          console.log("文件选择结果:", result);
           if (!result || result.length === 0) {
             return { success: false, canceled: true };
           }
@@ -867,8 +887,6 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
       getSyncLogs: async ({ sourcePath }) => {
         try {
           const logs = await readLogs(sourcePath);
-          console.log(logs);
-          
           return { success: true, logs };
         } catch (error) {
           return {
@@ -963,7 +981,7 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
                 // 只处理 change 事件
                 if (eventType === "change") {
                   console.log(`文件 ${filename} 内容发生变化`);
-                  omitFileChange({ fileName: filename });
+                  omitFileChange({ fileName: filename, isLocalChange: false });
                 }
               }
             },

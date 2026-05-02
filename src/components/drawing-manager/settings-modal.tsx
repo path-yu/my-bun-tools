@@ -1,5 +1,5 @@
 import { X, FolderOpen, Check, Database, FileSearch, Info } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { CADConfig, CADType } from "@/lib/types";
 import { useAppTheme } from "@/components/ThemeContext";
 import { getElectroView } from "@/lib/rpc";
@@ -41,11 +41,25 @@ export function SettingsModal({
   const modalRef = useRef<HTMLDivElement>(null);
   const { dbPath, saveConfig } = useConfig(); // 使用 Context
   const [currentDbPath, setCurrentDbPath] = useState(dbPath);
+  const [initialType, setInitialType] = useState(cadConfig.type as any);
+  const [initialCadPath, setInitialCadPath] = useState(cadConfig.path);
+  const [initialDbPath, setInitialDbPath] = useState(dbPath);
+
+  const isDirty = useMemo(() => {
+    return (
+      selectedType !== initialType ||
+      cadPath !== initialCadPath ||
+      currentDbPath !== initialDbPath
+    );
+  }, [selectedType, cadPath, currentDbPath, initialType, initialCadPath, initialDbPath]);
 
   useEffect(() => {
     setSelectedType(cadConfig.type as any);
     setCadPath(cadConfig.path);
     setCurrentDbPath(dbPath);
+    setInitialType(cadConfig.type as any);
+    setInitialCadPath(cadConfig.path);
+    setInitialDbPath(dbPath);
   }, [cadConfig, dbPath, isOpen]);
 
   useEffect(() => {
@@ -65,6 +79,11 @@ export function SettingsModal({
       ) {
         setIsTypeDropdownOpen(false);
       }
+    }
+    //获取默认数据库路径
+    const defaultDbPath = localStorage.getItem("dbPath");
+    if (defaultDbPath) {
+      setCurrentDbPath(defaultDbPath);
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -113,6 +132,10 @@ export function SettingsModal({
       });
 
     setSaved(true);
+    // 保存成功后更新初始值
+    setInitialType(selectedType as any);
+    setInitialCadPath(cadPath);
+    setInitialDbPath(currentDbPath);
     setTimeout(() => {
       setSaved(false);
       onClose();
@@ -323,7 +346,7 @@ export function SettingsModal({
           </button>
           <button
             onClick={handleSave}
-            disabled={saved}
+            disabled={saved || !isDirty}
             className={`flex items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium shadow-lg transition-all active:scale-[0.98] disabled:opacity-50 ${saved
                 ? "bg-emerald-500 text-white"
                 : "bg-blue-600 text-white hover:bg-blue-500 hover:shadow-blue-500/20"

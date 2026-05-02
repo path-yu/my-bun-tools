@@ -6,6 +6,7 @@ import { SyncLog } from "@/lib/types";
 import { getElectroView } from "@/lib/rpc";
 import { useAppTheme } from "@/components/ThemeContext";
 import { SelectDropdown } from "./SelectDropdown";
+import zhCN from "@/lib/locale";
 
 interface LogListProps {
   sourcePath?: string;
@@ -56,7 +57,6 @@ export function LogList({ sourcePath }: LogListProps) {
     }
     try {
       const result = await getElectroView().rpc!.request.getSyncLogs({ sourcePath });
-      console.log(result,'data');
 
       if (result.success && result.logs) {
         setLogs(result.logs);
@@ -326,6 +326,7 @@ export function LogList({ sourcePath }: LogListProps) {
             <DataGrid
               rows={rows}
               columns={columns}
+              localeText={zhCN}
               getRowId={(row) => row.id}
               initialState={{
                 pagination: { paginationModel: { pageSize: 50 } },
