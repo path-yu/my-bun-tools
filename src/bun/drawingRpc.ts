@@ -6,7 +6,11 @@ import {
   getZwCadFiles,
   closeZwCadDocument,
   parseDwgPath,
+  detectCadBrand,
+  activateZwCadDocument,
+  smartCadOpen,
 } from "./autoOpen";
+import {spawn}from 'node:child_process'
 import { CadBrand, Drawing, CAD_MAP, FileInfo, SyncLog } from "../lib/types";
 import {
   rollingChecksum,
@@ -178,6 +182,18 @@ export type DrawingRPC = {
       openFile: {
         params: { filePath: string };
         response: { success: boolean; error?: string };
+      };
+      openInExplorer: {
+        params: { filePath: string };
+        response: { success: boolean; error?: string };
+      };
+      isFileOpen: {
+        params: { filePath: string };
+        response: { isOpen: boolean; brandName?: string; error?: string };
+      };
+      openDwg: {
+        params: { filePath: string; isReadOnly?: boolean };
+        response: { success: boolean; message?: string; error?: string };
       };
       startWatchingDirectory: {
         params: {
@@ -933,6 +949,69 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
           return {
             success: false,
             error: error instanceof Error ? error.message : "打开文件失败",
+          };
+        }
+      },
+      openInExplorer: async ({ filePath }) => {
+        try {
+          if (process.platform === "win32") {
+            spawn("explorer", ["/select,", filePath], { shell: true });
+          } else {
+            spawn("open", [path.dirname(filePath)]);
+          }
+          return { success: true };
+        } catch (error) {
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : "在资源管理器中打开失败",
+          };
+        }
+      },
+      isFileOpen: async ({ filePath }) => {
+        try {
+          const cadConfig = await getDefaultDwgApp();
+          if (!cadConfig) {
+            return { isOpen: false };
+          }
+          const brandKey = detectCadBrand(cadConfig.path);
+          console.log(brandKey);
+          const openFiles = getZwCadFiles(brandKey);
+          const openFile = openFiles.find((f) => f.path === filePath);
+          if (openFile) {
+            //激活
+            activateZwCadDocument( brandKey,filePath);
+            return {
+              isOpen: true,
+              brandName: CAD_MAP[brandKey]?.brandName || brandKey,
+            };
+          }
+          return { isOpen: false };
+        } catch (error) {
+          return {
+            isOpen: false,
+            error: error instanceof Error ? error.message : "检查文件状态失败",
+          };
+        }
+      },
+      openDwg: async ({ filePath, isReadOnly = false }) => {
+        try {
+          const cadConfig = await getDefaultDwgApp();
+          if (!cadConfig) {
+            return {
+              success: false,
+              error: "未找到默认的 DWG 应用程序",
+            };
+          }
+          const brandKey = detectCadBrand(cadConfig.path);
+          const message = await smartCadOpen(brandKey, cadConfig.path, filePath, isReadOnly);
+          return {
+            success: true,
+            message,
+          };
+        } catch (error) {
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : "打开 DWG 文件失败",
           };
         }
       },

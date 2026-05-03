@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { FolderOpen, Database, X, History } from "lucide-react";
+import { X } from "lucide-react";
 import { Header } from "@/components/drawing-manager/header";
 import { DrawingTable } from "@/components/drawing-manager/drawing-table";
 import { DrawingForm } from "@/components/drawing-manager/drawing-form";
@@ -9,13 +9,14 @@ import { LogList } from "@/components/log-list";
 import { Drawing, DrawingFormData, CADConfig } from "@/lib/types";
 import { getElectroView } from "@/lib/rpc";
 import { useAppTheme } from "@/components/ThemeContext";
+import { IOSTabBar, IOSSlideView, TabKey } from "@/components/IOSTabBar";
 
 const DEFAULT_CAD_CONFIG: CADConfig = {
   type: "",
   path: "",
 };
 
-type ViewMode = "drawing" | "file" | "log";
+type ViewMode = TabKey;
 
 export default function DrawingManagerPage() {
   const { isDark } = useAppTheme();
@@ -169,94 +170,12 @@ export default function DrawingManagerPage() {
         <div className="space-y-6">
 
 
-          {/* 视图切换和操作栏 */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div
-                className={`inline-flex rounded-xl p-1 ${isDark ? "bg-slate-800" : "bg-slate-100"
-                  }`}
-              >
-                <button
-                  onClick={() => setViewMode("drawing")}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${viewMode === "drawing"
-                      ? isDark
-                        ? "bg-blue-500 text-white shadow"
-                        : "bg-white text-blue-600 shadow"
-                      : isDark
-                        ? "text-slate-400 hover:text-slate-200"
-                        : "text-slate-500 hover:text-slate-700"
-                    }`}
-                >
-                  <Database className="h-4 w-4" />
-                  数据库视图
-                </button>
-                <button
-                  onClick={() => setViewMode("file")}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${viewMode === "file"
-                      ? isDark
-                        ? "bg-blue-500 text-white shadow"
-                        : "bg-white text-blue-600 shadow"
-                      : isDark
-                        ? "text-slate-400 hover:text-slate-200"
-                        : "text-slate-500 hover:text-slate-700"
-                    }`}
-                >
-                  <FolderOpen className="h-4 w-4" />
-                  文件列表
-                </button>
-                <button
-                  onClick={() => setViewMode("log")}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${viewMode === "log"
-                      ? isDark
-                        ? "bg-blue-500 text-white shadow"
-                        : "bg-white text-blue-600 shadow"
-                      : isDark
-                        ? "text-slate-400 hover:text-slate-200"
-                        : "text-slate-500 hover:text-slate-700"
-                    }`}
-                >
-                  <History className="h-4 w-4" />
-                  同步日志
-                </button>
-              </div>
+          {/* iOS 风格标签栏 */}
+          <IOSTabBar activeTab={viewMode} onTabChange={(tab) => setViewMode(tab)} />
 
-              {/* 搜索筛选 - 根据视图显示不同的搜索框 */}
-              {viewMode === "drawing" ? (
-                null
-              ) : viewMode === "file" ? (
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="搜索文件名..."
-                    value={fileSearchQuery}
-                    onChange={(e) => setFileSearchQuery(e.target.value)}
-                    className={`h-10 w-64 rounded-lg border px-4 pr-10 text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${isDark
-                        ? "bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-500"
-                        : "bg-white border-slate-200 text-slate-800 placeholder:text-slate-400"
-                      }`}
-                  />
-                  {fileSearchQuery && (
-                    <button
-                      onClick={() => setFileSearchQuery("")}
-                      className={`absolute right-3 top-1/2 -translate-y-1/2 ${isDark ? "text-slate-500" : "text-slate-400"
-                        }`}
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-              ) : null}
-            </div>
-          </div>
-
-          {/* 内容区域 */}
-          <div className="relative min-h-[400px]">
-            <div
-              className={`absolute inset-0 transition-all duration-300 ease-in-out ${viewMode === "drawing"
-                  ? "opacity-100 translate-y-0"
-                  : "opacity-0 -translate-y-4 pointer-events-none"
-                }`}
-            >
+          {/* 内容区域 - iOS 滑动视图 */}
+          <IOSSlideView activeTab={viewMode}>
+            <div className="w-full flex-shrink-0">
               <DrawingTable
                 drawings={drawings}
                 onEdit={handleOpenEdit}
@@ -266,51 +185,17 @@ export default function DrawingManagerPage() {
                 }}
               />
             </div>
-
-            <div
-              className={`absolute inset-0 transition-all duration-300 ease-in-out ${viewMode === "file"
-                  ? "opacity-100 translate-y-0"
-                  : "opacity-0 -translate-y-4 pointer-events-none"
-                }`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-foreground">
-                    文件列表
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    管理本地和共享目录的文件
-                  </p>
-                </div>
-              </div>
+            <div className="w-full flex-shrink-0">
               <FileList
                 searchQuery={fileSearchQuery}
                 sourcePath={sourcePath}
                 onSourcePathChange={setSourcePath}
               />
             </div>
-
-            <div
-              className={`absolute inset-0 transition-all duration-300 ease-in-out ${viewMode === "log"
-                  ? "opacity-100 translate-y-0"
-                  : "opacity-0 -translate-y-4 pointer-events-none"
-                }`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-foreground">
-                    同步日志
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    查看文件同步的历史记录
-                  </p>
-                </div>
-              </div>
-              <LogList
-                sourcePath={sourcePath}
-              />
+            <div className="w-full flex-shrink-0">
+              <LogList sourcePath={sourcePath} />
             </div>
-          </div>
+          </IOSSlideView>
         </div>
       </main>
 

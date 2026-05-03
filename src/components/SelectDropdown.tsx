@@ -13,9 +13,10 @@ interface SelectDropdownProps {
   onChange: (value: string) => void;
   options: SelectOption[];
   placeholder?: string;
+  direction?: "left" | "right";
 }
 
-export function SelectDropdown({ value, onChange, options, placeholder }: SelectDropdownProps) {
+export function SelectDropdown({ value, onChange, options, placeholder, direction = "right" }: SelectDropdownProps) {
   const { isDark } = useAppTheme();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -59,9 +60,8 @@ export function SelectDropdown({ value, onChange, options, placeholder }: Select
         <span>{displayValue}</span>
         <ChevronDown className={`h-3 w-3 transition-transform ${isOpen ? "rotate-180" : ""}`} />
       </button>
-      <Grow style={{ transformOrigin: 'top right' }} // 设置动画起点
-  {...(isOpen ? { timeout: 200 } : {})} in={isOpen} timeout={200}>
-        <div className={`absolute right-0 top-full z-10 mt-1 overflow-hidden rounded-lg shadow-lg border min-w-[180px] ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
+      <Grow style={{ transformOrigin: direction === 'right' ? 'top right' : 'top left' }} {...(isOpen ? { timeout: 200 } : {})} in={isOpen} timeout={200}>
+        <div className={`absolute top-full z-10 mt-1 overflow-hidden rounded-lg shadow-lg border min-w-[180px] ${direction === 'right' ? 'right-0' : 'left-0'} ${isDark ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"
           }`}>
           {options.map((option) => (
             <button

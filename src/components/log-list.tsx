@@ -6,6 +6,7 @@ import { SyncLog } from "@/lib/types";
 import { getElectroView } from "@/lib/rpc";
 import { useAppTheme } from "@/components/ThemeContext";
 import { SelectDropdown } from "./SelectDropdown";
+import { IOSInput } from "./IOSInput";
 import zhCN from "@/lib/locale";
 
 interface LogListProps {
@@ -241,30 +242,12 @@ export function LogList({ sourcePath }: LogListProps) {
     <div className="space-y-4">
       {/* 筛选栏 */}
       <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl border bg-card">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="搜索文件名、原因或操作人..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className={`w-full pl-10 pr-4 py-2 rounded-lg border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${
-              isDark
-                ? "bg-slate-800 border-slate-700 text-slate-200 placeholder:text-slate-500"
-                : "bg-white border-slate-200 text-slate-800 placeholder:text-slate-400"
-            }`}
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery("")}
-              className={`absolute right-3 top-1/2 -translate-y-1/2 ${
-                isDark ? "text-slate-500 hover:text-slate-300" : "text-slate-400 hover:text-slate-600"
-              }`}
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
-        </div>
+        <IOSInput
+          value={searchQuery}
+          onChange={(value) => setSearchQuery(value)}
+          placeholder="搜索文件名、原因或操作人..."
+          className="flex-1 min-w-[200px]"
+        />
 
         <SelectDropdown
           value={reasonTypeFilter}
@@ -316,7 +299,7 @@ export function LogList({ sourcePath }: LogListProps) {
         <ThemeProvider theme={theme}>
           <Box
             sx={{
-              height: "calc(100vh - 320px)",
+              height: "calc(100vh - 280px)",
               width: "100%",
               bgcolor: "background.paper",
               borderRadius: "16px",

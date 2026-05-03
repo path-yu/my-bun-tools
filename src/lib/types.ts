@@ -128,6 +128,10 @@ export type DrawingRPC = {
         params: { filePath: string };
         response: { success: boolean; error?: string };
       };
+      openInExplorer: {
+        params: { filePath: string };
+        response: { success: boolean; error?: string };
+      };
       startWatchingDirectory: {
         params: { sourcePath: string; localPath: string };
         response: { success: boolean; error?: string };
@@ -151,6 +155,14 @@ export type DrawingRPC = {
       getSyncLogs: {
         params: { sourcePath?: string };
         response: { success: boolean; logs?: SyncLog[]; error?: string };
+      };
+      isFileOpen: {
+        params: { filePath: string };
+        response: { isOpen: boolean; brandName?: string };
+      };
+      openDwg: {
+        params: { filePath: string; isReadOnly: boolean };
+        response: { success: boolean; error?: string };
       };
     };
     messages: {

@@ -1,12 +1,31 @@
 import { exec, spawn } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
-import { CAD_MAP, type CadBrand } from "../lib/types";
+import {spawnSync} from 'bun';
 import * as os from "os";
-import { spawnSync } from "bun";
-import { join, dirname, basename } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
 
+export type CadBrand = "ZWCAD" | "AutoCAD" | "GstarCAD";
+import { existsSync, readFileSync } from "node:fs";
+import { join, dirname, basename } from "node:path";
+const CAD_MAP = {
+  ZWCAD: { key: "zwcad", label: "中望 CAD", progId: "ZWCAD.Application" },
+  AutoCAD: { key: "autocad", label: "AutoCAD", progId: "AutoCAD.Application" },
+  GstarCAD: { key: "gstarcad", label: "浩辰 CAD", progId: "GstarCAD.Application" },
+};
+
+/**
+ * 根据 CAD 程序路径识别品牌
+ */
+export function detectCadBrand(cadPath: string): CadBrand {
+  const pathLower = cadPath.toLowerCase();
+  
+  if (pathLower.includes("zw")) return "ZWCAD";
+  if (pathLower.includes("autocad")) return "AutoCAD";
+  if (pathLower.includes("gs")) return "GstarCAD";
+  
+  // 默认返回中望 CAD
+  return "ZWCAD";
+}
 function writeLog(message: string) {
   const logPath = path.join(os.tmpdir(), "cad-debug.log"); // 也可以指定固定目录
   const timestamp = new Date().toLocaleString();
@@ -141,6 +160,108 @@ export async function fixedCadLocate(
 }
 
 /**
+ * 智能定位函数：如果文件已打开则直接定位，否则先打开再定位
+ */
+export async function smartCadNavigate(
+  brand: CadBrand,
+  cadPath: string,
+  dwgPath: string,
+  x: number,
+  y: number,
+  zoomHeight: number = 500,
+): Promise<string> {
+  const config = CAD_MAP[brand];
+  if (!config) return "[错误]: 未定义的 CAD 品牌配置";
+
+  // --- 路径校验 ---
+  const check = validatePaths(cadPath, dwgPath);
+  if (!check.valid) {
+    console.error(check.msg);
+    return check.msg;
+  }
+
+  const absolutePath = path.resolve(sanitizePath(dwgPath));
+
+  // 第一步：尝试在已打开的 CAD 中定位文件
+  writeLog(`[smartCadNavigate] 第一步：尝试在已打开的文件中定位 ${absolutePath}`);
+  
+  const locateResult = await attemptFixedLocate(
+    config.progId,
+    absolutePath,
+    x,
+    y,
+    zoomHeight,
+  );
+
+  if (locateResult.success) {
+    writeLog(`[smartCadNavigate] 成功在已打开的文件中定位`);
+    return "[定位成功]: 在已打开的文件中完成定位";
+  }
+
+  // 第二步：文件未打开，需要启动 CAD 并定位
+  writeLog(`[smartCadNavigate] 第二步：启动 CAD 程序并打开文件`);
+  return await professionalCadNavigate(brand, cadPath, dwgPath, x, y, zoomHeight);
+}
+
+/**
+ * 尝试在已打开的 CAD 中定位（Promise 版本）
+ */
+function attemptFixedLocate(
+  progId: string,
+  dwgPath: string,
+  x: number,
+  y: number,
+  zoomHeight: number,
+): Promise<{ success: boolean; msg: string }> {
+  return new Promise((resolve) => {
+    if (isNaN(x) || isNaN(y)) {
+      resolve({ success: false, msg: "[参数错误]: 坐标值无效" });
+      return;
+    }
+
+    const psSafePath = dwgPath.replace(/'/g, "''");
+    const fileName = path.basename(dwgPath).replace(/'/g, "''");
+
+    const psCommands = `
+      $ErrorActionPreference = 'Stop'
+      try {
+          $cad = [Runtime.InteropServices.Marshal]::GetActiveObject('${progId}')
+          $targetDoc = $cad.Documents | Where-Object { 
+              $_.FullName.ToLower() -eq '${psSafePath.toLowerCase()}' -or $_.Name.ToLower() -eq '${fileName.toLowerCase()}' 
+          } | Select-Object -First 1
+
+          if (-not $targetDoc) {
+              Write-Host 'NOT_FOUND'
+              exit 1
+          }
+          
+          $targetDoc.Activate()
+          $cmd = [char]27 + [char]27 + "._UCS _W ._ZOOM _C ${x},${y} ${zoomHeight} "
+          $targetDoc.SendCommand($cmd)
+          Write-Host 'Success'
+      } catch {
+          Write-Host 'NOT_FOUND'
+          exit 1
+      }
+    `;
+
+    const base64Str = Buffer.from(psCommands, "utf16le").toString("base64");
+    exec(
+      `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${base64Str}`,
+      { timeout: 5000 },
+      (error, stdout) => {
+        const output = stdout.trim();
+        if (!error && output.includes("Success")) {
+          resolve({ success: true, msg: "Success" });
+        } else {
+          resolve({ success: false, msg: "File not open" });
+        }
+      },
+    );
+  });
+}
+
+/**
  * 核心逻辑：智能启动并定位
  */
 export async function professionalCadNavigate(
@@ -196,7 +317,6 @@ export async function professionalCadNavigate(
       (success) => {
         if (success) {
           clearInterval(timer);
-          console.log(`[定位成功]`);
         } else if (attempts >= maxAttempts) {
           clearInterval(timer);
           console.error(
@@ -274,6 +394,115 @@ function executePowerShell(
         } else {
           resolve(`[${successMsg}]`);
         }
+      },
+    );
+  });
+}
+
+/**
+ * 智能打开 CAD 文件（支持只读模式）
+ * 如果文件已打开，则激活窗口；如果未打开，则启动 CAD 并打开文件
+ * @param isReadOnly 是否以只读模式打开（默认为 false）
+ */
+export async function smartCadOpen(
+  brand: CadBrand,
+  cadPath: string,
+  dwgPath: string,
+  isReadOnly: boolean = false,
+): Promise<string> {
+  const config = CAD_MAP[brand];
+  if (!config) return "[错误]: 未定义的 CAD 品牌配置";
+
+  // --- 路径校验 ---
+  const check = validatePaths(cadPath, dwgPath);
+  if (!check.valid) {
+    console.error(check.msg);
+    return check.msg;
+  }
+
+  const absolutePath = path.resolve(dwgPath);
+  const psSafePath = absolutePath.replace(/'/g, "''");
+  const fileName = path.basename(absolutePath).replace(/'/g, "''").toLowerCase();
+
+  // 第一步：检查文件是否已经在 CAD 中打开，如果是则激活
+  writeLog(`[smartCadOpen] 第一步：检查文件是否已打开 ${absolutePath}`);
+
+  const checkScript = `
+    try {
+        $cad = [Runtime.InteropServices.Marshal]::GetActiveObject('${config.progId}')
+        $targetDoc = $cad.Documents | Where-Object { 
+            $_.FullName.ToLower() -eq '${psSafePath.toLowerCase()}' -or $_.Name.ToLower() -eq '${fileName}' 
+        } | Select-Object -First 1
+
+        if ($targetDoc) {
+            $targetDoc.Activate()
+            Write-Host 'ALREADY_OPEN'
+        } else {
+            Write-Host 'NOT_OPEN'
+        }
+    } catch {
+        Write-Host 'CAD_NOT_RUNNING'
+    }
+  `;
+
+  const checkResult = await executePowerShellAsync(checkScript);
+
+  if (checkResult.includes("ALREADY_OPEN")) {
+    writeLog(`[smartCadOpen] 文件已在 CAD 中打开，激活窗口`);
+    return `[已打开]: 窗口已激活 (${isReadOnly ? "只读" : "编辑"})`;
+  }
+
+  // 第二步：文件未打开，启动 CAD 或在已启动的 CAD 中打开文件
+  writeLog(`[smartCadOpen] 第二步：启动 CAD 或在已启动的 CAD 中打开文件`);
+
+  const openScript = `
+$ErrorActionPreference = 'Stop'
+try { 
+    $cad = [Runtime.InteropServices.Marshal]::GetActiveObject('${config.progId}') 
+} catch { 
+    $cad = New-Object -ComObject '${config.progId}' 
+}
+$cad.Visible = $true
+$targetDoc = $cad.Documents | Where-Object { 
+    $_.FullName.ToLower() -eq '${psSafePath.toLowerCase()}' -or $_.Name.ToLower() -eq '${fileName}' 
+} | Select-Object -First 1
+if (-not $targetDoc) { 
+    $targetDoc = $cad.Documents.Open('${psSafePath}', ${isReadOnly ? "$true" : "$false"}) 
+}
+$targetDoc.Activate()
+Write-Host 'SUCCESS'
+  `;
+
+  const base64Str = Buffer.from(openScript, "utf16le").toString("base64");
+  
+  return new Promise((resolve) => {
+    exec(
+      `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${base64Str}`,
+      { timeout: 15000 },
+      (error, stdout) => {
+        if (!error && stdout.includes("SUCCESS")) {
+          writeLog(`[smartCadOpen] 文件打开成功`);
+          resolve(`[打开成功]: 文件已打开 (${isReadOnly ? "只读" : "编辑"})`);
+        } else {
+          writeLog(`[smartCadOpen] 打开失败: ${error?.message || stdout}`);
+          resolve(`[打开中]: 正在启动 CAD...`);
+        }
+      },
+    );
+  });
+}
+
+/**
+ * 执行 PowerShell 脚本并返回输出内容
+ */
+function executePowerShellAsync(script: string): Promise<string> {
+  const base64Str = Buffer.from(script, "utf16le").toString("base64");
+  return new Promise((resolve) => {
+    exec(
+      `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${base64Str}`,
+      { timeout: 5000 },
+      (error, stdout) => {
+        resolve(stdout.trim());
       },
     );
   });

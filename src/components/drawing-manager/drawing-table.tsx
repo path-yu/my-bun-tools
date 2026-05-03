@@ -14,13 +14,12 @@ import {
   Zap,
   Trash2,
   RefreshCw,
-  Search,
-  X,
 } from "lucide-react";
 import { getElectroView } from "@/lib/rpc";
 import { useConfirm } from "../useConfirm";
 import { useToast } from "../useToast";
 import { SelectDropdown } from "../SelectDropdown";
+import { IOSInput } from "../IOSInput";
 
 
 
@@ -74,7 +73,7 @@ export function DrawingTable({
 }: DrawingTableProps) {
   const { isDark } = useAppTheme();
   const { confirm, ConfirmDialog } = useConfirm();
-  const { showToast, ToastComponent } = useToast();
+  const { showToast } = useToast();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [drawingNumber, setDrawingNumber] = useState("");
   const [materialCode, setMaterialCode] = useState("");
@@ -108,7 +107,7 @@ export function DrawingTable({
       return drawing.filePath;
     }
     const fileName = drawing.fileName || "";
-    const fullPath = `${selectedBasePath}\\${fileName}`;
+    const fullPath = `${selectedBasePath}\\${fileName}.dwg`;
     return fullPath;
   };
 
@@ -321,8 +320,8 @@ export function DrawingTable({
     },
     {
       field: "actions",
-      headerName: "CAD 操作",
-      width: 200,
+      headerName: "操作",
+      width: 240,
       sortable: false,
       renderCell: (p: GridRenderCellParams) => (
         <div className="flex gap-2 items-center">
@@ -330,7 +329,7 @@ export function DrawingTable({
             onClick={() => handleOpenInCAD(p.row)}
             className="flex items-center h-5 gap-1 rounded-md px-2 py-1 text-[11px] cursor-pointer font-medium text-blue-400 hover:bg-blue-500/10 active:scale-95 transition-all"
           >
-            <FolderOpen className="h-3 w-3" /> 首次
+            <FolderOpen className="h-3 w-3" /> 打开并定位
           </button>
           <button
             onClick={() => handleQuickLocate(p.row)}
@@ -443,61 +442,22 @@ export function DrawingTable({
             options={basePathOptions}
             value={selectedBasePath}
             onChange={setSelectedBasePath}
+            direction="left"
           />
           <div className="flex flex-end">
             <div className="flex items-center gap-2">
-              <div
-                className={`flex items-center rounded-lg border ${isDark
-                  ? "bg-slate-800 border-slate-700"
-                  : "bg-white border-slate-200"
-                  }`}
-              >
-                <Search className="h-4 w-4 mx-2 text-slate-400" />
-                <input
-                  type="text"
-                  value={drawingNumber}
-                  onChange={(e) => setDrawingNumber(e.target.value)}
-                  placeholder="图号..."
-                  className={`w-32 px-2 py-1.5 text-sm outline-none rounded-lg ${isDark
-                    ? "bg-slate-800 text-slate-200 placeholder:text-slate-500"
-                    : "bg-white text-slate-700 placeholder:text-slate-400"
-                    }`}
-                />
-                {drawingNumber && (
-                  <button
-                    onClick={clearDrawingNumber}
-                    className="p-1 mr-1 hover:bg-slate-500/20 rounded"
-                  >
-                    <X className="h-3 w-3 text-slate-400" />
-                  </button>
-                )}
-              </div>
-              <div
-                className={`flex items-center rounded-lg border ${isDark
-                  ? "bg-slate-800 border-slate-700"
-                  : "bg-white border-slate-200"
-                  }`}
-              >
-                <Search className="h-4 w-4 mx-2 text-slate-400" />
-                <input
-                  type="text"
-                  value={materialCode}
-                  onChange={(e) => setMaterialCode(e.target.value)}
-                  placeholder="物料编码..."
-                  className={`w-32 px-2 py-1.5 text-sm outline-none rounded-lg ${isDark
-                    ? "bg-slate-800 text-slate-200 placeholder:text-slate-500"
-                    : "bg-white text-slate-700 placeholder:text-slate-400"
-                    }`}
-                />
-                {materialCode && (
-                  <button
-                    onClick={clearMaterialCode}
-                    className="p-1 mr-1 hover:bg-slate-500/20 rounded"
-                  >
-                    <X className="h-3 w-3 text-slate-400" />
-                  </button>
-                )}
-              </div>
+              <IOSInput
+                value={drawingNumber}
+                onChange={(value) => setDrawingNumber(value)}
+                placeholder="图号..."
+                className="w-40"
+              />
+              <IOSInput
+                value={materialCode}
+                onChange={(value) => setMaterialCode(value)}
+                placeholder="物料编码..."
+                className="w-40"
+              />
               <button
                 onClick={handleRefresh}
                 disabled={isRefreshing}
@@ -536,7 +496,6 @@ export function DrawingTable({
           />
         </Box>      </Box>
       <ConfirmDialog />
-      <ToastComponent />
     </ThemeProvider>
   );
 }
