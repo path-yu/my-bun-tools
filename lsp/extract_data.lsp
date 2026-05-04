@@ -437,7 +437,7 @@
       )
       
       (princ (strcat "\n共提取 " (itoa (length final_list)) " 个有效图框。"))
-      ;; (upload_to_backend final_list)   ; 已注释，保持原样
+      (upload_to_backend final_list)   ; 已注释，保持原样
     )
     (princ "\n[取消] 未选中任何闭合多段线。")
   )
