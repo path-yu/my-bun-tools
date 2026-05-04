@@ -143,15 +143,19 @@
               ty   (cadr (car item))
               tstr (cadr item)
         )
-       ;; A. 寻找产品编码 (左上角最近距离 + 长度过滤)
+       ;; A. 寻找产品编码 (左上角最近距离 + 长度过滤 + 数字开头过滤)
         (if (and (>= tx (car s_min)) (<= tx (car s_max))
                  (>= ty (cadr s_min)) (<= ty (cadr s_max)))
           (progn 
             (setq tmp (clean_final_logic tstr))
             ;; --- 优化逻辑开始 ---
+            ;; 检查第一个字符是否为数字
+            (setq first_char (substr tmp 1 1))
+            (setq first_code (ascii first_char))
             (if (and (/= tmp "") 
-                     (> (strlen tmp) 1)                        ;; 过滤：长度必须大于1（排除单位数字序号）
-                     (not (member tmp '("1" "2" "3" "4" "5","N2"))) ;; 过滤：排除常见的单位数字干扰
+                     (> (strlen tmp) 1)                                   ;; 长度必须大于1
+                     (>= first_code 48) (<= first_code 57)              ;; 必须以数字开头
+                     (not (member tmp '("1" "2" "3" "4" "5")))          ;; 排除单个数字干扰
                 )
               (progn
                 (setq dist (distance top_left (list tx ty)))
@@ -284,7 +288,7 @@
                           (apply 'max (mapcar 'cadr vlist)))
               area (abs (* (- (car p_max) (car p_min)) (- (cadr p_max) (cadr p_min)))))
         
-        (if (and (> area 1000000.0) (< area 400000000.0))
+        (if (and (> area 900000.0) (< area 800000000.0))
           (if (setq res (process_single_box p_min p_max))
             (if (not (member (strcat (nth 0 res) (nth 2 res)) unique_list))
               (setq final_list (cons res final_list)
@@ -309,7 +313,7 @@
   (vl-load-com)
   (setq vla_obj_out (vlax-ename->vla-object ent_out)
         pdfname     (strcat (nth 0 res) "-" (nth 1 res) "-" (nth 2 res) ".pdf")
-        pdfname     (vl-string-translate "/\\:*?\"<>|" "_________" pdfname)
+        pdfname     (vl-string-translate "/\\:*?\"<>|" "-" pdfname)
         path        (strcat desktop pdfname)
   )
 
@@ -714,7 +718,7 @@
               out_area (abs (* (- (car p2_out) (car p1_out)) (- (cadr p2_out) (cadr p1_out))))
               vla_obj_out (vlax-ename->vla-object ent_out))
 
-        (if (and (> out_area 1000000.0) (< out_area 400000000.0))
+        (if (and (> out_area 800000.0) (< out_area 800000000.0))
           (if (setq ss_inner (ssget "C" p1_out p2_out '((0 . "LWPOLYLINE") (70 . 1))))
             (progn
               (setq k 0)
@@ -917,7 +921,7 @@
     (princ "\n未发现符合条件的物件。")
   )
   
-  (command "_.regen")
+  (commeand "_.regen")
   (princ)
 )
 ;; ==========================================================
