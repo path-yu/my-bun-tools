@@ -79,6 +79,9 @@ export function DrawingTable({
   const [materialCode, setMaterialCode] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedBasePath, setSelectedBasePath] = useState<string>("");
+  const [openMode, setOpenMode] = useState<"edit" | "readonly">("readonly");
+  const [openInCadLoading, setOpenInCadLoading] = useState<Set<string>>(new Set());
+  const [quickLocateLoading, setQuickLocateLoading] = useState<Set<string>>(new Set());
   const theme = useDataGridTheme(isDark);
   const basePathOptions = useMemo(() => {
     const sourcePath = localStorage.getItem("sourcePath");
@@ -183,10 +186,15 @@ export function DrawingTable({
     });
   }, [filteredDrawings]);
 
-  const handleOpenInCAD = (drawing: Drawing) => {
+  const handleOpenInCAD = (drawing: Drawing, isReadOnly: boolean = false) => {
     if (!cadConfig?.path) {
       return showToast("请先配置 CAD 路径", "error");
     }
+    const rowId = drawing.id || drawing.materialCode;
+    if (openInCadLoading.has(rowId)) return;
+    
+    setOpenInCadLoading(prev => new Set(prev).add(rowId));
+    
     const fullDwgPath = getFullDwgPath(drawing);
     getElectroView()
       .rpc!.request.professionalCadNavigate({
@@ -196,8 +204,14 @@ export function DrawingTable({
         x: drawing.x ?? 0,
         y: drawing.y ?? 0,
         zoomHeight: 500,
+        isReadOnly,
       })
       .then((result: any) => {
+        setOpenInCadLoading(prev => {
+          const next = new Set(prev);
+          next.delete(rowId);
+          return next;
+        });
         if (result) {
           if (
             result.includes("失败") ||
@@ -209,13 +223,25 @@ export function DrawingTable({
             showToast(result, "success");
           }
         }
+      })
+      .catch(() => {
+        setOpenInCadLoading(prev => {
+          const next = new Set(prev);
+          next.delete(rowId);
+          return next;
+        });
       });
   };
 
-  const handleQuickLocate = (drawing: Drawing) => {
+  const handleQuickLocate = (drawing: Drawing, isReadOnly: boolean = false) => {
     if (!cadConfig?.path) {
       return showToast("请先配置 CAD 路径", "error");
     }
+    const rowId = drawing.id || drawing.materialCode;
+    if (quickLocateLoading.has(rowId)) return;
+    
+    setQuickLocateLoading(prev => new Set(prev).add(rowId));
+    
     const fullDwgPath = getFullDwgPath(drawing);
     getElectroView()
       .rpc!.request.locateInCad({
@@ -224,8 +250,14 @@ export function DrawingTable({
         x: drawing.x ?? 0,
         y: drawing.y ?? 0,
         zoomHeight: 500,
+        isReadOnly,
       })
       .then((result: any) => {
+        setQuickLocateLoading(prev => {
+          const next = new Set(prev);
+          next.delete(rowId);
+          return next;
+        });
         if (result) {
           if (result.includes("失败") || result.includes("错误")) {
             showToast(result, "error");
@@ -233,6 +265,14 @@ export function DrawingTable({
             showToast("定位指令已发送", "success");
           }
         }
+      })
+      .catch(() => {
+        setQuickLocateLoading(prev => {
+          const next = new Set(prev);
+          next.delete(rowId);
+          return next;
+        });
+        showToast("定位指令失败", "error");
       });
   };
 
@@ -321,24 +361,56 @@ export function DrawingTable({
     {
       field: "actions",
       headerName: "操作",
-      width: 240,
+      width: 220,
       sortable: false,
-      renderCell: (p: GridRenderCellParams) => (
-        <div className="flex gap-2 items-center">
-          <button
-            onClick={() => handleOpenInCAD(p.row)}
-            className="flex items-center h-5 gap-1 rounded-md px-2 py-1 text-[11px] cursor-pointer font-medium text-blue-400 hover:bg-blue-500/10 active:scale-95 transition-all"
-          >
-            <FolderOpen className="h-3 w-3" /> 打开并定位
-          </button>
-          <button
-            onClick={() => handleQuickLocate(p.row)}
-            className="flex items-center h-5 gap-1 rounded-md px-2 py-1 text-[11px] cursor-pointer font-medium text-amber-400 hover:bg-amber-500/10 active:scale-95 transition-all"
-          >
-            <Zap className="h-3 w-3" /> 定位
-          </button>
-        </div>
-      ),
+      renderCell: (p: GridRenderCellParams) => {
+        const rowId = p.row.id || p.row.materialCode;
+        const isOpenLoading = openInCadLoading.has(rowId);
+        const isLocateLoading = quickLocateLoading.has(rowId);
+        
+        return (
+          <div className="flex gap-2 items-center">
+            <button
+              onClick={() => handleOpenInCAD(p.row, openMode === "readonly")}
+              disabled={isOpenLoading}
+              className={`flex items-center h-5 gap-1 rounded-md px-2 py-1 text-[11px] cursor-pointer font-medium transition-all ${isOpenLoading
+                ? "bg-blue-500/20 text-blue-300 cursor-not-allowed"
+                : "text-blue-400 hover:bg-blue-500/10 active:scale-95"
+                }`}
+            >
+              {isOpenLoading ? (
+                <>
+                  <div className="h-3 w-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                  打开中...
+                </>
+              ) : (
+                <>
+                  <FolderOpen className="h-3 w-3" /> 打开定位
+                </>
+              )}
+            </button>
+            <button
+              onClick={() => handleQuickLocate(p.row, openMode === "readonly")}
+              disabled={isLocateLoading}
+              className={`flex items-center h-5 gap-1 rounded-md px-2 py-1 text-[11px] cursor-pointer font-medium transition-all ${isLocateLoading
+                ? "bg-amber-500/20 text-amber-300 cursor-not-allowed"
+                : "text-amber-400 hover:bg-amber-500/10 active:scale-95"
+                }`}
+            >
+              {isLocateLoading ? (
+                <>
+                  <div className="h-3 w-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                  定位中...
+                </>
+              ) : (
+                <>
+                  <Zap className="h-3 w-3" /> 定位
+                </>
+              )}
+            </button>
+          </div>
+        );
+      },
     },
     {
       field: "remarks",
@@ -399,8 +471,6 @@ export function DrawingTable({
     },
   ];
 
-  const clearDrawingNumber = () => setDrawingNumber("");
-  const clearMaterialCode = () => setMaterialCode("");
 
   if (drawings.length === 0) {
     return (
@@ -476,10 +546,20 @@ export function DrawingTable({
                 onChange={setSelectedCategory}
               />
             </div>
+            <div className="ml-2">
+              <SelectDropdown
+                options={[
+                  { value: "edit", label: "编辑模式" },
+                  { value: "readonly", label: "只读模式" },
+                ]}
+                value={openMode}
+                onChange={(value) => setOpenMode(value as any)}
+              />
+            </div>
           </div>
 
         </Box>
-        <Box sx={{ height: "calc(100vh - 260px)" }}>
+        <Box sx={{ height: "calc(100vh - 300px)" }}>
           <DataGrid
             rows={rows}
             columns={columns}

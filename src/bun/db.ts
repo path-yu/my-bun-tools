@@ -3,6 +3,7 @@ import { Utils } from "electrobun/bun";
 import { join, resolve, isAbsolute } from "path";
  import fs from "fs";
 import { Drawing } from "@/lib/types";
+
 // --- 1. 类型定义 ---
 
 // --- 2. 安全数据库实例 ---
@@ -36,7 +37,7 @@ export const  initializeDb = async (customPath?: string) => {
     console.log(`[DB] 连接成功：${_db.filename}`);
     if (!fileExists) console.log(`[DB] 新建空数据库`);
 
-    // 创建表
+    // 创建图纸表
     _db.exec(`
       CREATE TABLE IF NOT EXISTS drawings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,6 +49,20 @@ export const  initializeDb = async (customPath?: string) => {
         x REAL DEFAULT 0,
         y REAL DEFAULT 0,
         remarks TEXT
+      );
+    `);
+
+    // 创建产品表
+    _db.exec(`
+      CREATE TABLE IF NOT EXISTS products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        unit TEXT,
+        productName TEXT,
+        processRoute TEXT,
+        productCode TEXT UNIQUE,
+        productSpec TEXT,
+        productAttribute TEXT,
+        created_at TEXT DEFAULT (datetime('now'))
       );
     `);
 
@@ -165,6 +180,133 @@ export const drawingSql = {
       return count;
     });
     return tx(items);
+  }
+};
+
+export interface Product {
+  id?: number;
+  unit: string;
+  productName: string;
+  processRoute: string;
+  productCode: string;
+  productSpec: string;
+  productAttribute: string;
+  created_at?: string;
+}
+
+export const productSql = {
+  getAll: (): Product[] => {
+    const db = getDb();
+    return db.prepare(`SELECT * FROM products ORDER BY id DESC`).all() as Product[];
+  },
+
+  search: (productCode: string, productSpec: string): Product[] => {
+    const db = getDb();
+    const codePattern = productCode ? `%${productCode}%` : '%';
+    const specPattern = productSpec ? `%${productSpec}%` : '%';
+    return db.prepare(`
+      SELECT * FROM products 
+      WHERE productCode LIKE ? AND productSpec LIKE ?
+      ORDER BY id DESC
+    `).all(codePattern, specPattern) as Product[];
+  },
+
+  filterByAttribute: (attribute: string): Product[] => {
+    const db = getDb();
+    if (!attribute || attribute === "all") {
+      return db.prepare(`SELECT * FROM products ORDER BY id DESC`).all() as Product[];
+    }
+    return db.prepare(`
+      SELECT * FROM products 
+      WHERE productAttribute = ?
+      ORDER BY id DESC
+    `).all(attribute) as Product[];
+  },
+
+  getByCodePrefix: (prefix: string): Product[] => {
+    const db = getDb();
+    const pattern = `${prefix}%`;
+    return db.prepare(`
+      SELECT * FROM products 
+      WHERE productCode LIKE ?
+      ORDER BY id DESC
+    `).all(pattern) as Product[];
+  },
+
+  upsert: (item: Product) => {
+    const db = getDb();
+    return db.prepare(`
+      INSERT INTO products (unit, productName, processRoute, productCode, productSpec, productAttribute)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(productCode) DO UPDATE SET
+        unit = COALESCE(excluded.unit, products.unit),
+        productName = COALESCE(excluded.productName, products.productName),
+        processRoute = COALESCE(excluded.processRoute, products.processRoute),
+        productSpec = COALESCE(excluded.productSpec, products.productSpec),
+        productAttribute = COALESCE(excluded.productAttribute, products.productAttribute),
+        created_at = datetime('now')
+      RETURNING *
+    `).get(
+      item.unit || null,
+      item.productName || null,
+      item.processRoute || null,
+      item.productCode,
+      item.productSpec || null,
+      item.productAttribute || null
+    ) as Product;
+  },
+
+  batchInsert: (items: Product[]) => {
+    const db = getDb();
+    const tx = db.transaction((list) => {
+      let count = 0;
+      for (const it of list) {
+        if (!it.productCode) continue;
+        productSql.upsert(it);
+        count++;
+      }
+      return count;
+    });
+    return tx(items);
+  },
+
+  delete: (id: number) => {
+    const db = getDb();
+    return db.prepare(`DELETE FROM products WHERE id = ?`).run(id);
+  },
+
+  update: (item: Product) => {
+    const db = getDb();
+    return db.prepare(`
+      UPDATE products 
+      SET 
+        unit = COALESCE(?, unit),
+        productName = COALESCE(?, productName),
+        processRoute = COALESCE(?, processRoute),
+        productCode = COALESCE(?, productCode),
+        productSpec = COALESCE(?, productSpec),
+        productAttribute = COALESCE(?, productAttribute)
+      WHERE id = ?
+    `).run(
+      item.unit || null,
+      item.productName || null,
+      item.processRoute || null,
+      item.productCode || null,
+      item.productSpec || null,
+      item.productAttribute || null,
+      item.id || 0
+    );
+  },
+
+  getAllCodePrefixes: (): string[] => {
+    const db = getDb();
+    const results = db.prepare(`
+      SELECT DISTINCT SUBSTR(productCode, 1, 4) as prefix 
+      FROM products 
+      WHERE productAttribute = '自制'
+      ORDER BY prefix
+    `).all() as { prefix: string }[];
+    return results.map(r => r.prefix).filter(Boolean);
   }
 };
 

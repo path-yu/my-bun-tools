@@ -1,6 +1,6 @@
-import { FolderOpen, Database, History } from "lucide-react";
+import { FolderOpen, Database, History, Package } from "lucide-react";
 
-type TabKey = "drawing" | "file" | "log";
+type TabKey = "drawing" | "file" | "log" | "product";
 
 interface TabItem {
   key: TabKey;
@@ -14,9 +14,10 @@ interface IOSTabBarProps {
 }
 
 const tabs: TabItem[] = [
-  { key: "drawing", label: "数据库", icon: <Database className="h-5 w-5" /> },
-  { key: "file", label: "文件", icon: <FolderOpen className="h-5 w-5" /> },
-  { key: "log", label: "日志", icon: <History className="h-5 w-5" /> },
+  { key: "drawing", label: "图纸列表", icon: <Database className="h-5 w-5" /> },
+  { key: "file", label: "文件列表", icon: <FolderOpen className="h-5 w-5" /> },
+  { key: "log", label: "日志列表", icon: <History className="h-5 w-5" /> },
+  { key: "product", label: "产品列表", icon: <Package className="h-5 w-5" /> },
 ];
 
 export function IOSTabBar({ activeTab, onTabChange }: IOSTabBarProps) {

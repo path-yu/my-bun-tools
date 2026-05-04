@@ -119,6 +119,8 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
   const [syncingFiles, setSyncingFiles] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState<string>(propSearchQuery || "");
   const [openMode, setOpenMode] = useState<"edit" | "readonly">("edit");
+  const [openingEditFiles, setOpeningEditFiles] = useState<Set<string>>(new Set());
+  const [openingReadOnlyFiles, setOpeningReadOnlyFiles] = useState<Set<string>>(new Set());
   const [syncReasonModal, setSyncReasonModal] = useState<{
     isOpen: boolean;
     fileName: string;
@@ -514,6 +516,15 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
   };
 
   const handleOpenDwg = async (file: FileInfo, isReadOnly: boolean) => {
+    const setOpening = isReadOnly ? setOpeningReadOnlyFiles : setOpeningEditFiles;
+    const openingSet = isReadOnly ? openingReadOnlyFiles : openingEditFiles;
+    
+    if (openingSet.has(file.path)) {
+      return;
+    }
+    
+    setOpening(prev => new Set(prev).add(file.path));
+    
     try {
       const isOpenResult = await getElectroView().rpc!.request.isFileOpen({ filePath: file.path });
       if (isOpenResult.isOpen) {
@@ -529,6 +540,12 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
     } catch (err) {
       console.error("打开文件失败:", err);
       showToast("打开文件失败", "error");
+    } finally {
+      setOpening(prev => {
+        const next = new Set(prev);
+        next.delete(file.path);
+        return next;
+      });
     }
   };
 
@@ -705,6 +722,8 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
         if (p.row.isDirectory) return null;
         const isUpdating = updatingFiles.has(p.row.name);
         const isSyncing = syncingFiles.has(p.row.name);
+        const isOpeningEdit = openingEditFiles.has(p.row.path);
+        const isOpeningReadOnly = openingReadOnlyFiles.has(p.row.path);
         const ext = p.row.extension?.toLowerCase() || "";
         const isDwgFile = ext === "dwg" || ext === "dxf";
 
@@ -717,22 +736,48 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
                     e.stopPropagation();
                     handleOpenDwg(p.row, false);
                   }}
-                  className={`inline-flex h-8 items-center justify-center gap-1 px-2 rounded text-xs font-medium transition-colors cursor-pointer hover:bg-blue-500/20 text-blue-500`}
+                  disabled={isOpeningEdit}
+                  className={`inline-flex h-8 items-center justify-center gap-1 px-2 rounded text-xs font-medium transition-colors cursor-pointer ${isOpeningEdit
+                    ? "bg-blue-500/20 text-blue-400 cursor-not-allowed"
+                    : "hover:bg-blue-500/20 text-blue-500"
+                    }`}
                   title="编辑模式打开"
                 >
-                  <Edit className="h-3 w-3" />
-                  编辑
+                  {isOpeningEdit ? (
+                    <>
+                      <div className="h-3 w-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                      打开中...
+                    </>
+                  ) : (
+                    <>
+                      <Edit className="h-3 w-3" />
+                      编辑
+                    </>
+                  )}
                 </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     handleOpenDwg(p.row, true);
                   }}
-                  className={`inline-flex h-8 items-center justify-center gap-1 px-2 rounded text-xs font-medium transition-colors cursor-pointer hover:bg-amber-500/20 text-amber-500`}
+                  disabled={isOpeningReadOnly}
+                  className={`inline-flex h-8 items-center justify-center gap-1 px-2 rounded text-xs font-medium transition-colors cursor-pointer ${isOpeningReadOnly
+                    ? "bg-amber-500/20 text-amber-400 cursor-not-allowed"
+                    : "hover:bg-amber-500/20 text-amber-500"
+                    }`}
                   title="只读模式打开"
                 >
-                  <Eye className="h-3 w-3" />
-                  只读
+                  {isOpeningReadOnly ? (
+                    <>
+                      <div className="h-3 w-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                      打开中...
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="h-3 w-3" />
+                      只读
+                    </>
+                  )}
                 </button>
               </>
             )}
@@ -745,7 +790,7 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
               title="在资源管理器中显示"
             >
               <FolderSearch className="h-3 w-3" />
-              在资源管理器打开
+              打开
             </button>
             <button
               onClick={(e) => {

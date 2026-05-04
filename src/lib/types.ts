@@ -24,7 +24,16 @@ export interface DrawingFormData {
   remarks?: string;
   // category: DrawingCategory
 }
-
+export interface Product {
+  id?: number;
+  unit: string;
+  productName: string;
+  processRoute: string;
+  productCode: string;
+  productSpec: string;
+  productAttribute: string;
+  created_at?: string;
+}
 export type CADType = "AutoCAD" | "浩辰CAD" | "中望CAD";
 
 export interface CADConfig {
@@ -68,6 +77,7 @@ export type DrawingRPC = {
           x: number;
           y: number;
           zoomHeight?: number;
+          isReadOnly?: boolean;
         };
         response: any;
       };
@@ -79,6 +89,7 @@ export type DrawingRPC = {
           x: number;
           y: number;
           zoomHeight?: number;
+          isReadOnly?: boolean;
         };
         response: any;
       };
@@ -164,6 +175,51 @@ export type DrawingRPC = {
         params: { filePath: string; isReadOnly: boolean };
         response: { success: boolean; error?: string };
       };
+       getProducts: {
+        params: {};
+        response: Product[];
+      };
+      searchProducts: {
+        params: { productCode?: string; productSpec?: string };
+        response: Product[];
+      };
+      filterProductsByAttribute: {
+        params: { attribute: string };
+        response: Product[];
+      };
+      getProductsByCodePrefix: {
+        params: { prefix: string };
+        response: Product[];
+      };
+      addProduct: {
+        params: Product;
+        response: { success: boolean; product?: Product; error?: string };
+      };
+      importProductsFromExcel: {
+        params: { filePath: string };
+        response: { success: boolean; count?: number; error?: string };
+      };
+      deleteProduct: {
+        params: { id: number };
+        response: { success: boolean; error?: string };
+      };
+      getAllCodePrefixes: {
+        params: {};
+        response: string[];
+      };
+      selectExcelFile: {
+        params: {};
+        response: {
+          success: boolean;
+          path?: string;
+          error?: string;
+          canceled?: boolean;
+        };
+      };
+      updateProduct: {
+        params: Product;
+        response: { success: boolean; error?: string };
+      };  
     };
     messages: {
       fileChanged: {

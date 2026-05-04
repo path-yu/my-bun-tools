@@ -1,11 +1,11 @@
-import { useState, useMemo, useEffect } from "react";
-import { X } from "lucide-react";
+import { useState,  useEffect } from "react";
 import { Header } from "@/components/drawing-manager/header";
 import { DrawingTable } from "@/components/drawing-manager/drawing-table";
 import { DrawingForm } from "@/components/drawing-manager/drawing-form";
 import { SettingsModal } from "@/components/drawing-manager/settings-modal";
 import { FileList } from "@/components/file-list/file-list";
 import { LogList } from "@/components/log-list";
+import { ProductList } from "@/components/product-list/product-list";
 import { Drawing, DrawingFormData, CADConfig } from "@/lib/types";
 import { getElectroView } from "@/lib/rpc";
 import { useAppTheme } from "@/components/ThemeContext";
@@ -194,6 +194,9 @@ export default function DrawingManagerPage() {
             </div>
             <div className="w-full flex-shrink-0">
               <LogList sourcePath={sourcePath} />
+            </div>
+            <div className="w-full flex-shrink-0">
+              <ProductList />
             </div>
           </IOSSlideView>
         </div>

@@ -1,7 +1,8 @@
 import { BrowserView, Utils, type RPCSchema } from "electrobun/bun";
 import { drawingSql, initializeDb } from "./db";
+import * as XLSX from "xlsx";
 import {
-  fixedCadLocate,
+  locateInCad,
   professionalCadNavigate,
   getZwCadFiles,
   closeZwCadDocument,
@@ -10,7 +11,7 @@ import {
   activateZwCadDocument,
   smartCadOpen,
 } from "./autoOpen";
-import {spawn}from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { CadBrand, Drawing, CAD_MAP, FileInfo, SyncLog } from "../lib/types";
 import {
   rollingChecksum,
@@ -24,7 +25,7 @@ import { omitFileChange } from ".";
 import * as os from "os";
 import { getDbPath } from "./db";
 import { getDefaultDwgApp } from "../lib/utils-for-bun";
-
+import { productSql, Product } from "./db";
 export type DrawingRPC = {
   bun: RPCSchema<{
     requests: {
@@ -36,7 +37,7 @@ export type DrawingRPC = {
       // 获取当前用户的cad配置
       getCadConfig: {
         params: {};
-        response: {path:string,type:string};
+        response: { path: string, type: string };
       };
       getAll: {
         params: {};
@@ -61,6 +62,7 @@ export type DrawingRPC = {
           x: number;
           y: number;
           zoomHeight?: number;
+          isReadOnly?: boolean;
         };
         response: any;
       };
@@ -68,11 +70,11 @@ export type DrawingRPC = {
         params: {
           brand: CadBrand;
           cadPath: string;
-          materialCode: string;
           dwgPath: string;
           x: number;
           y: number;
           zoomHeight?: number;
+          isReadOnly?: boolean;
         };
         response: any;
       };
@@ -211,7 +213,52 @@ export type DrawingRPC = {
         response: { success: boolean };
       };
       startWatchingLocalDirectory: {
-        params: { localPath: string,sourcePath: string };
+        params: { localPath: string, sourcePath: string };
+        response: { success: boolean; error?: string };
+      };
+      getProducts: {
+        params: {};
+        response: Product[];
+      };
+      searchProducts: {
+        params: { productCode?: string; productSpec?: string };
+        response: Product[];
+      };
+      filterProductsByAttribute: {
+        params: { attribute: string };
+        response: Product[];
+      };
+      getProductsByCodePrefix: {
+        params: { prefix: string };
+        response: Product[];
+      };
+      addProduct: {
+        params: Product;
+        response: { success: boolean; product?: Product; error?: string };
+      };
+      importProductsFromExcel: {
+        params: { filePath: string };
+        response: { success: boolean; count?: number; error?: string };
+      };
+      deleteProduct: {
+        params: { id: number };
+        response: { success: boolean; error?: string };
+      };
+      getAllCodePrefixes: {
+        params: {};
+        response: string[];
+      };
+      selectExcelFile: {
+        params: {};
+        response: {
+          success: boolean;
+          path?: string;
+          error?: string;
+          canceled?: boolean;
+        };
+      };
+      updateProduct: {
+        params: Product;
         response: { success: boolean; error?: string };
       };
     };
@@ -219,7 +266,7 @@ export type DrawingRPC = {
   webview: RPCSchema<{
     requests: {
       fileChange: {
-        params: { fileName: string,isLocalChange: boolean };
+        params: { fileName: string, isLocalChange: boolean };
         response: void;
       };
     };
@@ -770,7 +817,6 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
         localPath,
         fileName,
         brandKey,
-        logData,
       }) => {
         try {
           const srcFile = path.join(sourcePath, fileName);
@@ -805,13 +851,12 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
           }
 
           const result = await smartCopyFile(srcFile, destFile);
-          // 保存日志
-          await saveLog(logData);
+
 
           if (wasOpen && activeBrand) {
             if (fileName.toLowerCase().endsWith(".dwg")) {
               Utils.openExternal(destFile);
-                await new Promise((resolve) => setTimeout(resolve, 500));
+              await new Promise((resolve) => setTimeout(resolve, 500));
               console.log(
                 `重新打开文件 ${fileName} 在 ${CAD_MAP[activeBrand].brandName} 中...`,
               );
@@ -870,7 +915,7 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
           if (wasOpen && activeBrand) {
             if (fileName.toLowerCase().endsWith(".dwg")) {
               Utils.openExternal(destFile);
-                await new Promise((resolve) => setTimeout(resolve, 500));
+              await new Promise((resolve) => setTimeout(resolve, 500));
               console.log(
                 `重新打开文件 ${fileName} 在 ${CAD_MAP[activeBrand].brandName} 中...`,
               );
@@ -974,12 +1019,11 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
             return { isOpen: false };
           }
           const brandKey = detectCadBrand(cadConfig.path);
-          console.log(brandKey);
           const openFiles = getZwCadFiles(brandKey);
           const openFile = openFiles.find((f) => f.path === filePath);
           if (openFile) {
             //激活
-            activateZwCadDocument( brandKey,filePath);
+            activateZwCadDocument(brandKey, filePath);
             return {
               isOpen: true,
               brandName: CAD_MAP[brandKey]?.brandName || brandKey,
@@ -1015,8 +1059,8 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
           };
         }
       },
-      locateInCad: ({ cadType, dwgPath, x, y, zoomHeight = 500 }) => {
-        return fixedCadLocate(cadType, dwgPath, x, y, zoomHeight);
+      locateInCad: ({ cadType, dwgPath, x, y, zoomHeight = 500, isReadOnly = false }) => {
+        return locateInCad(cadType, dwgPath, x, y, zoomHeight, isReadOnly);
       },
       professionalCadNavigate: ({
         brand,
@@ -1025,6 +1069,7 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
         x,
         y,
         zoomHeight = 500,
+        isReadOnly = false,
       }) => {
         return professionalCadNavigate(
           brand,
@@ -1033,6 +1078,7 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
           x,
           y,
           zoomHeight,
+          isReadOnly,
         );
       },
       startWatchingDirectory: async ({ sourcePath, localPath }) => {
@@ -1096,7 +1142,7 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
           return { success: false };
         }
       },
-      startWatchingLocalDirectory: async ({  localPath,sourcePath }) => {
+      startWatchingLocalDirectory: async ({ localPath, sourcePath }) => {
         try {
           if (activeLocalWatchers.has(localPath)) {
             return { success: true };
@@ -1128,7 +1174,7 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
             console.error(`监听本地目录 ${localPath} 出错:`, error);
           });
 
-          activeLocalWatchers.set(localPath, { watcher, localPath:sourcePath });
+          activeLocalWatchers.set(localPath, { watcher, localPath: sourcePath });
           console.log(`开始监听本地目录: ${localPath}, 源目录: ${sourcePath}`);
 
           return { success: true };
@@ -1152,6 +1198,120 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
         } catch (error) {
           console.error("停止本地监听失败:", error);
           return { success: false };
+        }
+      },
+      getProducts: async () => {
+        try {
+          return productSql.getAll();
+        } catch (error) {
+          console.error("获取产品列表失败:", error);
+          return [];
+        }
+      },
+      searchProducts: async ({ productCode, productSpec }) => {
+        try {
+          return productSql.search(productCode || "", productSpec || "");
+        } catch (error) {
+          console.error("搜索产品失败:", error);
+          return [];
+        }
+      },
+      filterProductsByAttribute: async ({ attribute }) => {
+        try {
+          return productSql.filterByAttribute(attribute);
+        } catch (error) {
+          console.error("按属性筛选产品失败:", error);
+          return [];
+        }
+      },
+      getProductsByCodePrefix: async ({ prefix }) => {
+        try {
+          return productSql.getByCodePrefix(prefix);
+        } catch (error) {
+          console.error("按产品编码前缀筛选失败:", error);
+          return [];
+        }
+      },
+      addProduct: async (product) => {
+        try {
+          const result = productSql.upsert(product);
+          return { success: true, product: result };
+        } catch (error) {
+          console.error("添加产品失败:", error);
+          return { success: false, error: error instanceof Error ? error.message : "添加产品失败" };
+        }
+      },
+      importProductsFromExcel: async ({ filePath }) => {
+        try {
+          const fileBuffer = await fs.readFile(filePath);
+          const workbook = XLSX.read(fileBuffer, { type: "buffer" });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          let jsonData = XLSX.utils.sheet_to_json(worksheet, { header: ["sort", "unit", "productName", "processRoute", "productCode", "productSpec", "productAttribute"] });
+          jsonData = jsonData.slice(1, jsonData.length - 1);//去掉表头
+          const products: Product[] = [];
+          for (let i = 1; i < jsonData.length; i++) {
+            const row = jsonData[i] as Product
+            products.push({
+              unit: row.unit || "",
+              productName: row.productName || "",
+              processRoute: row.processRoute || "",
+              productCode: String(row.productCode).trim(),
+              productSpec: row.productSpec || "",
+              productAttribute: row.productAttribute || "",
+            });
+          }
+
+          const count = productSql.batchInsert(products);
+          return { success: true, count };
+        } catch (error) {
+          console.error("导入产品失败:", error);
+          return { success: false, error: error instanceof Error ? error.message : "导入产品失败" };
+        }
+      },
+      deleteProduct: async ({ id }) => {
+        try {
+          productSql.delete(id);
+          return { success: true };
+        } catch (error) {
+          console.error("删除产品失败:", error);
+          return { success: false, error: error instanceof Error ? error.message : "删除产品失败" };
+        }
+      },
+      getAllCodePrefixes: async () => {
+        try {
+          return productSql.getAllCodePrefixes();
+        } catch (error) {
+          console.error("获取产品编码前缀失败:", error);
+          return [];
+        }
+      },
+      selectExcelFile: async () => {
+        try {
+          const result = await Utils.openFileDialog({
+            canChooseFiles: true,
+            canChooseDirectory: false,
+            allowsMultipleSelection: false,
+          });
+          if (!result || result.length === 0) {
+            return { success: false, canceled: true };
+          }
+          return { success: true, path: result[0] };
+        } catch (error) {
+          console.error("选择Excel文件失败:", error);
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : "选择Excel文件失败",
+          };
+        }
+      },
+      updateProduct: async (product) => {
+        try {
+          productSql.upsert(product);
+          return { success: true };
+        } catch (error) {
+          console.error("更新产品失败:", error);
+          return { success: false, error: error instanceof Error ? error.message : "更新产品失败" };
         }
       },
     },

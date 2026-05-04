@@ -1,7 +1,7 @@
 import { exec, spawn } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
-import {spawnSync} from 'bun';
+import { spawnSync } from 'bun';
 import * as os from "os";
 
 export type CadBrand = "ZWCAD" | "AutoCAD" | "GstarCAD";
@@ -18,11 +18,11 @@ const CAD_MAP = {
  */
 export function detectCadBrand(cadPath: string): CadBrand {
   const pathLower = cadPath.toLowerCase();
-  
+
   if (pathLower.includes("zw")) return "ZWCAD";
   if (pathLower.includes("autocad")) return "AutoCAD";
   if (pathLower.includes("gs")) return "GstarCAD";
-  
+
   // 默认返回中望 CAD
   return "ZWCAD";
 }
@@ -109,12 +109,13 @@ function sanitizePath(rawPath: string): string {
 /**
  * 强行定位到具体 DWG 文件的指定坐标
  */
-export async function fixedCadLocate(
+export async function locateInCad(
   brand: CadBrand,
   dwgPath: string,
   x: number,
   y: number,
   zoomHeight: number = 500,
+  isReadOnly: boolean = false,
 ) {
   if (isNaN(x) || isNaN(y)) return "[参数错误]: 坐标值无效";
   const config = CAD_MAP[brand];
@@ -144,7 +145,7 @@ export async function fixedCadLocate(
         } | Select-Object -First 1
 
         if (-not $targetDoc) {
-            $targetDoc = $cad.Documents.Open('${psSafePath}')
+           $targetDoc = $cad.Documents.Open($path, ${isReadOnly ? '$true' : '$false'})
         }
         $targetDoc.Activate()
         $cmd = [char]27 + [char]27 + "._UCS _W ._ZOOM _C ${x},${y} ${zoomHeight} "
@@ -160,108 +161,6 @@ export async function fixedCadLocate(
 }
 
 /**
- * 智能定位函数：如果文件已打开则直接定位，否则先打开再定位
- */
-export async function smartCadNavigate(
-  brand: CadBrand,
-  cadPath: string,
-  dwgPath: string,
-  x: number,
-  y: number,
-  zoomHeight: number = 500,
-): Promise<string> {
-  const config = CAD_MAP[brand];
-  if (!config) return "[错误]: 未定义的 CAD 品牌配置";
-
-  // --- 路径校验 ---
-  const check = validatePaths(cadPath, dwgPath);
-  if (!check.valid) {
-    console.error(check.msg);
-    return check.msg;
-  }
-
-  const absolutePath = path.resolve(sanitizePath(dwgPath));
-
-  // 第一步：尝试在已打开的 CAD 中定位文件
-  writeLog(`[smartCadNavigate] 第一步：尝试在已打开的文件中定位 ${absolutePath}`);
-  
-  const locateResult = await attemptFixedLocate(
-    config.progId,
-    absolutePath,
-    x,
-    y,
-    zoomHeight,
-  );
-
-  if (locateResult.success) {
-    writeLog(`[smartCadNavigate] 成功在已打开的文件中定位`);
-    return "[定位成功]: 在已打开的文件中完成定位";
-  }
-
-  // 第二步：文件未打开，需要启动 CAD 并定位
-  writeLog(`[smartCadNavigate] 第二步：启动 CAD 程序并打开文件`);
-  return await professionalCadNavigate(brand, cadPath, dwgPath, x, y, zoomHeight);
-}
-
-/**
- * 尝试在已打开的 CAD 中定位（Promise 版本）
- */
-function attemptFixedLocate(
-  progId: string,
-  dwgPath: string,
-  x: number,
-  y: number,
-  zoomHeight: number,
-): Promise<{ success: boolean; msg: string }> {
-  return new Promise((resolve) => {
-    if (isNaN(x) || isNaN(y)) {
-      resolve({ success: false, msg: "[参数错误]: 坐标值无效" });
-      return;
-    }
-
-    const psSafePath = dwgPath.replace(/'/g, "''");
-    const fileName = path.basename(dwgPath).replace(/'/g, "''");
-
-    const psCommands = `
-      $ErrorActionPreference = 'Stop'
-      try {
-          $cad = [Runtime.InteropServices.Marshal]::GetActiveObject('${progId}')
-          $targetDoc = $cad.Documents | Where-Object { 
-              $_.FullName.ToLower() -eq '${psSafePath.toLowerCase()}' -or $_.Name.ToLower() -eq '${fileName.toLowerCase()}' 
-          } | Select-Object -First 1
-
-          if (-not $targetDoc) {
-              Write-Host 'NOT_FOUND'
-              exit 1
-          }
-          
-          $targetDoc.Activate()
-          $cmd = [char]27 + [char]27 + "._UCS _W ._ZOOM _C ${x},${y} ${zoomHeight} "
-          $targetDoc.SendCommand($cmd)
-          Write-Host 'Success'
-      } catch {
-          Write-Host 'NOT_FOUND'
-          exit 1
-      }
-    `;
-
-    const base64Str = Buffer.from(psCommands, "utf16le").toString("base64");
-    exec(
-      `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${base64Str}`,
-      { timeout: 5000 },
-      (error, stdout) => {
-        const output = stdout.trim();
-        if (!error && output.includes("Success")) {
-          resolve({ success: true, msg: "Success" });
-        } else {
-          resolve({ success: false, msg: "File not open" });
-        }
-      },
-    );
-  });
-}
-
-/**
  * 核心逻辑：智能启动并定位
  */
 export async function professionalCadNavigate(
@@ -271,33 +170,22 @@ export async function professionalCadNavigate(
   x: number,
   y: number,
   zoomHeight: number = 500,
+  isReadOnly: boolean = false,
 ) {
   const config = CAD_MAP[brand];
   if (!config) return "[错误]: 未定义的 CAD 品牌配置";
-
   // --- 路径校验：同时校验 CAD 程序和 DWG 文件 ---
   const check = validatePaths(cadPath, dwgPath);
   if (!check.valid) {
     console.error(check.msg);
     return check.msg; // 立即向前端报错
   }
-
   const safeDwgPath = path.resolve(dwgPath);
-
+  //
   try {
-    // 使用 spawn 启动程序，捕获可能的同步错误
-    const child = spawn(`"${cadPath}"`, [`"${safeDwgPath}"`, "/nologo"], {
-      detached: true,
-      stdio: "ignore",
-      shell: true,
-      windowsVerbatimArguments: true,
-    });
-
-    child.on("error", (err) => {
-      console.error(`[系统执行错误]: ${err.message}`);
-    });
-
-    child.unref();
+    // 使用openScipt打开文件
+     await smartCadOpen(brand, cadPath, safeDwgPath, isReadOnly);
+    //  return result
   } catch (err) {
     return `[权限错误]: 无法启动 CAD 程序，请检查管理员权限。`;
   }
@@ -305,7 +193,6 @@ export async function professionalCadNavigate(
   // --- 异步追击定位 ---
   let attempts = 0;
   const maxAttempts = 15; // 缩短探测次数，提高反馈效率
-
   const timer = setInterval(() => {
     attempts++;
     runPowerShellLocate(
@@ -314,6 +201,7 @@ export async function professionalCadNavigate(
       x,
       y,
       zoomHeight,
+      isReadOnly,
       (success) => {
         if (success) {
           clearInterval(timer);
@@ -326,7 +214,6 @@ export async function professionalCadNavigate(
       },
     );
   }, 3000);
-
   return `[启动中]: 正在尝试唤起 CAD...`;
 }
 
@@ -339,6 +226,7 @@ function runPowerShellLocate(
   x: number,
   y: number,
   zoomHeight: number,
+  isReadOnly: boolean = false,
   callback: (success: boolean, msg: string) => void,
 ) {
   const psSafePath = dwgPath.replace(/'/g, "''").toLowerCase();
@@ -354,7 +242,12 @@ function runPowerShellLocate(
             $targetDoc.Activate()
             $targetDoc.SendCommand([char]27 + [char]27 + "._UCS _W ._ZOOM _C ${x},${y} ${zoomHeight} ")
             Write-Host 'OK'
-        } else { exit 1 }
+        } else {
+            $targetDoc = $cad.Documents.Open('${psSafePath}', ${isReadOnly ? "$true" : "$false"})
+            $targetDoc.Activate()
+            $targetDoc.SendCommand([char]27 + [char]27 + "._UCS _W ._ZOOM _C ${x},${y} ${zoomHeight} ")
+            Write-Host 'OK'
+        }
     } catch { exit 1 }
   `;
 
@@ -392,6 +285,8 @@ function executePowerShell(
         if (error) {
           resolve(`[${failMsg}]: CAD 实例未就绪或图纸被独占`);
         } else {
+          console.log(stdout);
+
           resolve(`[${successMsg}]`);
         }
       },
@@ -474,7 +369,7 @@ Write-Host 'SUCCESS'
   `;
 
   const base64Str = Buffer.from(openScript, "utf16le").toString("base64");
-  
+
   return new Promise((resolve) => {
     exec(
       `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${base64Str}`,
