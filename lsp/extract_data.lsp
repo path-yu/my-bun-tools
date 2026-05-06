@@ -1,7 +1,7 @@
 (vl-load-com)
 
 ;; ==========================================================
-;; 1. Ç¿Á¦ÎÄ×ÖÇåÏ´º¯Êı
+;; 1. å¼ºåŠ›æ–‡å­—æ¸…æ´—å‡½æ•°
 ;; ==========================================================
 (defun clean_final_logic (str / s pos1 pos2 result i len char code) 
   (setq s str)
@@ -40,7 +40,7 @@
 )
 
 ;; ==========================================================
-;; 2. µ÷ÊÔ¿òÉú³Éº¯Êı (ºìÉ«)
+;; 2. è°ƒè¯•æ¡†ç”Ÿæˆå‡½æ•° (çº¢è‰²)
 ;; ==========================================================
 (defun draw_debug_rect (p1 p2) 
   (entmake 
@@ -59,7 +59,7 @@
 )
 
 ;; ==========================================================
-;; 3. µ¥¸öÍ¼¿ò´¦ÀíÂß¼­ (·µ»ØÊı¾İÁĞ±í)
+;; 3. å•ä¸ªå›¾æ¡†å¤„ç†é€»è¾‘ (è¿”å›æ•°æ®åˆ—è¡¨)
 ;; ==========================================================
 (defun process_single_box (pmin pmax / ax ay ray y_hits int_pt cur_y_val top_left 
                            s_min s_max cur_m cur_d cur_p cur_x cur_y_pt tx ty tstr tmp 
@@ -71,7 +71,7 @@
         box_w  (- (car pmax) (car pmin))
         box_h  (- (cadr pmax) (cadr pmin))
   )
-  ;; --- ²½Öè 1: ´©´ÌÏßÂß¼­ ---
+  ;; --- æ­¥éª¤ 1: ç©¿åˆºçº¿é€»è¾‘ ---
   (if 
     (setq ss_local_lines (ssget "C" 
                                 (list (- ax 10) ay)
@@ -103,26 +103,26 @@
   )
   (setq y_hits (vl-sort y_hits '<))
 
-  ;; --- ²½Öè 2: ¶¨Î»ÎÄ×Ö ---
+  ;; --- æ­¥éª¤ 2: å®šä½æ–‡å­— ---
   (if (>= (length y_hits) 2) 
     (progn 
       (setq top_left (list (car pmin) (cadr pmax)))
-      ;; ĞŞ¸Ä process_single_box ÄÚ²¿µÄËÑË÷¶¨Òå
-      (setq s_min (list (car top_left) (- (cadr top_left) (* box_h 0.1))) ;; ÏÂÌ½¸ß¶ÈµÄ10%
-            s_max (list (+ (car top_left) (* box_w 0.5)) (+ (cadr top_left) (* box_h 0.01))) ;; ºáÏò¸²¸Ç¿í¶ÈµÄÒ»°ë
+      ;; ä¿®æ”¹ process_single_box å†…éƒ¨çš„æœç´¢å®šä¹‰
+      (setq s_min (list (car top_left) (- (cadr top_left) (* box_h 0.1))) ;; ä¸‹æ¢é«˜åº¦çš„10%
+            s_max (list (+ (car top_left) (* box_w 0.5)) (+ (cadr top_left) (* box_h 0.01))) ;; æ¨ªå‘è¦†ç›–å®½åº¦çš„ä¸€åŠ
       )
-      ;; --- ÔÚÕâÀï²åÈëÏÂÃæÕâĞĞ´úÂëÀ´¿ªÆôµ÷ÊÔ ---
+      ;; --- åœ¨è¿™é‡Œæ’å…¥ä¸‹é¢è¿™è¡Œä»£ç æ¥å¼€å¯è°ƒè¯• ---
       ;;(draw_debug_rect s_min s_max)
       
-      ;; --- ĞÂÔö£ºÏÔÊ¾ÎïÁÏ±àÂëºÍÍ¼ºÅµÄËÑË÷Çø ---
+      ;; --- æ–°å¢ï¼šæ˜¾ç¤ºç‰©æ–™ç¼–ç å’Œå›¾å·çš„æœç´¢åŒº ---
       (if (>= (length y_hits) 4)
         (progn
-          ;; 1. ÎïÁÏ±àÂëËÑË÷Çø (y_hits µÄµÚ2Ìõµ½µÚ3ÌõÏßÖ®¼ä)
+          ;; 1. ç‰©æ–™ç¼–ç æœç´¢åŒº (y_hits çš„ç¬¬2æ¡åˆ°ç¬¬3æ¡çº¿ä¹‹é—´)
           ;;(draw_debug_rect 
           ;;  (list (- ax 1000) (nth 1 y_hits)) 
           ;;  (list ax (nth 2 y_hits)))
           ;;
-          ;;;; 2. Í¼ºÅËÑË÷Çø (y_hits µÄµÚ3Ìõµ½µÚ4ÌõÏßÖ®¼ä)
+          ;;;; 2. å›¾å·æœç´¢åŒº (y_hits çš„ç¬¬3æ¡åˆ°ç¬¬4æ¡çº¿ä¹‹é—´)
           ;;(draw_debug_rect 
           ;;  (list (- ax 1000) (nth 2 y_hits)) 
           ;;  (list ax (nth 3 y_hits)))
@@ -143,19 +143,19 @@
               ty   (cadr (car item))
               tstr (cadr item)
         )
-       ;; A. Ñ°ÕÒ²úÆ·±àÂë (×óÉÏ½Ç×î½ü¾àÀë + ³¤¶È¹ıÂË + Êı×Ö¿ªÍ·¹ıÂË)
+       ;; A. å¯»æ‰¾äº§å“ç¼–ç  (å·¦ä¸Šè§’æœ€è¿‘è·ç¦» + é•¿åº¦è¿‡æ»¤ + æ•°å­—å¼€å¤´è¿‡æ»¤)
         (if (and (>= tx (car s_min)) (<= tx (car s_max))
                  (>= ty (cadr s_min)) (<= ty (cadr s_max)))
           (progn 
             (setq tmp (clean_final_logic tstr))
-            ;; --- ÓÅ»¯Âß¼­¿ªÊ¼ ---
-            ;; ¼ì²éµÚÒ»¸ö×Ö·ûÊÇ·ñÎªÊı×Ö
+            ;; --- ä¼˜åŒ–é€»è¾‘å¼€å§‹ ---
+            ;; æ£€æŸ¥ç¬¬ä¸€ä¸ªå­—ç¬¦æ˜¯å¦ä¸ºæ•°å­—
             (setq first_char (substr tmp 1 1))
             (setq first_code (ascii first_char))
             (if (and (/= tmp "") 
-                     (> (strlen tmp) 1)                                   ;; ³¤¶È±ØĞë´óÓÚ1
-                     (>= first_code 48) (<= first_code 57)              ;; ±ØĞëÒÔÊı×Ö¿ªÍ·
-                     (not (member tmp '("1" "2" "3" "4" "5")))          ;; ÅÅ³ıµ¥¸öÊı×Ö¸ÉÈÅ
+                     (> (strlen tmp) 1)                                   ;; é•¿åº¦å¿…é¡»å¤§äº1
+                     (>= first_code 48) (<= first_code 57)              ;; å¿…é¡»ä»¥æ•°å­—å¼€å¤´
+                     (not (member tmp '("1" "2" "3" "4" "5")))          ;; æ’é™¤å•ä¸ªæ•°å­—å¹²æ‰°
                 )
               (progn
                 (setq dist (distance top_left (list tx ty)))
@@ -165,22 +165,22 @@
                 )
               )
             )
-            ;; --- ÓÅ»¯Âß¼­½áÊø ---
+            ;; --- ä¼˜åŒ–é€»è¾‘ç»“æŸ ---
           )
         )
 
-        ;; B. Ñ°ÕÒÍ¼ºÅºÍÎïÁÏ±àÂë
+        ;; B. å¯»æ‰¾å›¾å·å’Œç‰©æ–™ç¼–ç 
         (if (and (> tx (- ax 1000)) (< tx ax)) 
           (cond 
-            ;; ÎïÁÏ±àÂëÍ¨³£ÔÚµ¹ÊıµÚ¶ş¸ñ
+            ;; ç‰©æ–™ç¼–ç é€šå¸¸åœ¨å€’æ•°ç¬¬äºŒæ ¼
             ((and (>= (length y_hits) 4) (>= ty (nth 1 y_hits)) (<= ty (nth 2 y_hits)))
             (setq tmp (clean_final_logic tstr))
             (if (> (strlen tmp) 2) (setq cur_m tmp cur_x tx cur_y_pt ty)))
             
-            ;; Í¼ºÅ£ºËø¶¨ÔÚµÚ3ÌõºÍµÚ4ÌõÏßÖ®¼ä£¬ÇÒ¸ü¿¿½üÓÒÏÂ½Ç
+            ;; å›¾å·ï¼šé”å®šåœ¨ç¬¬3æ¡å’Œç¬¬4æ¡çº¿ä¹‹é—´ï¼Œä¸”æ›´é è¿‘å³ä¸‹è§’
             ((and (>= (length y_hits) 4) (>= ty (nth 2 y_hits)) (<= ty (nth 3 y_hits)))
             (setq tmp (clean_final_logic tstr))
-            ;; ¹ıÂËµô´ø 'MPa' »ò 'm3' µÄ¸ÉÈÅÏî (¸ù¾İÄãµÄ´íÎóÑù±¾Ôö¼ÓÅĞ¶Ï)
+            ;; è¿‡æ»¤æ‰å¸¦ 'MPa' æˆ– 'm3' çš„å¹²æ‰°é¡¹ (æ ¹æ®ä½ çš„é”™è¯¯æ ·æœ¬å¢åŠ åˆ¤æ–­)
             (if (and (> (strlen tmp) 2) 
                       (not (vl-string-search "MPa" tstr))
                       (not (vl-string-search "m3" tstr)))
@@ -189,16 +189,16 @@
           )
         )
       )
-      ;; --- ĞÂÔö£º´òÓ¡Âß¼­ ---
-   ;; === ĞÂÔö£ºÎ´ÕÒµ½Êı¾İÊ±µÄ¿ØÖÆÌ¨´òÓ¡Õï¶Ï ===
+      ;; --- æ–°å¢ï¼šæ‰“å°é€»è¾‘ ---
+   ;; === æ–°å¢ï¼šæœªæ‰¾åˆ°æ•°æ®æ—¶çš„æ§åˆ¶å°æ‰“å°è¯Šæ–­ ===
       ;; (if (or (= cur_m "") (= cur_d "") (= cur_p ""))
       ;;   (progn
       ;;     (princ "\n------------------------------------")
-      ;;     (princ (strcat "\n[Õï¶Ï] Í¼¿ò×ø±ê (ÓÒÏÂ½Ç): " (rtos ax 2 2) ", " (rtos ay 2 2)))
-      ;;     (princ (strcat "\n[Õï¶Ï] ¼ì²âµ½ºáÏßÊıÁ¿: " (itoa (length y_hits))))
-      ;;     (if (= cur_p "") (princ "\n[´íÎó] Î´ÄÜÆ¥Åäµ½ -> [²úÆ·±àÂë] (×óÉÏ½ÇÇøÓò)"))
-      ;;     (if (= cur_m "") (princ "\n[´íÎó] Î´ÄÜÆ¥Åäµ½ -> [ÎïÁÏ±àÂë] (y_hits µÚ2-3ÏßÖ®¼ä)"))
-      ;;     (if (= cur_d "") (princ "\n[´íÎó] Î´ÄÜÆ¥Åäµ½ -> [Í¼ºÅ] (y_hits µÚ3-4ÏßÖ®¼ä)"))
+      ;;     (princ (strcat "\n[è¯Šæ–­] å›¾æ¡†åæ ‡ (å³ä¸‹è§’): " (rtos ax 2 2) ", " (rtos ay 2 2)))
+      ;;     (princ (strcat "\n[è¯Šæ–­] æ£€æµ‹åˆ°æ¨ªçº¿æ•°é‡: " (itoa (length y_hits))))
+      ;;     (if (= cur_p "") (princ "\n[é”™è¯¯] æœªèƒ½åŒ¹é…åˆ° -> [äº§å“ç¼–ç ] (å·¦ä¸Šè§’åŒºåŸŸ)"))
+      ;;     (if (= cur_m "") (princ "\n[é”™è¯¯] æœªèƒ½åŒ¹é…åˆ° -> [ç‰©æ–™ç¼–ç ] (y_hits ç¬¬2-3çº¿ä¹‹é—´)"))
+      ;;     (if (= cur_d "") (princ "\n[é”™è¯¯] æœªèƒ½åŒ¹é…åˆ° -> [å›¾å·] (y_hits ç¬¬3-4çº¿ä¹‹é—´)"))
       ;;     (princ "\n------------------------------------")
       ;;   )
       ;; )
@@ -211,7 +211,7 @@
 )
 
 ;; ==========================================================
-;; 4. ºóÌ¨ÉÏ´«º¯Êı
+;; 4. åå°ä¸Šä¼ å‡½æ•°
 ;; ==========================================================
 (defun upload_to_backend (data_list / url http json_str dwg_full_path dwg_name item i) 
   (setq url "http://localhost:3003/uploadDrawings")
@@ -221,7 +221,7 @@
       (setq dwg_full_path (vl-string-translate "\\" "/" dwg_full_path))
       (setq dwg_name (getvar "DWGNAME"))
 
-      (princ "\nÕıÔÚ·â×°Êı¾İ²¢Í¬²½µ½Êı¾İ¿â...")
+      (princ "\næ­£åœ¨å°è£…æ•°æ®å¹¶åŒæ­¥åˆ°æ•°æ®åº“...")
 
       (setq json_str (strcat "{\"filePath\":\"" dwg_full_path "\",\"data\":["))
       (setq i 0)
@@ -244,21 +244,21 @@
       (vlax-invoke-method http 'open "POST" url :vlax-false)
       (vlax-invoke-method http 'setRequestHeader "Content-Type" "application/json;charset=utf-8")
 
-      (princ "\n[ÍøÂç] ·¢ËÍ POST ÇëÇó...")
+      (princ "\n[ç½‘ç»œ] å‘é€ POST è¯·æ±‚...")
       (vl-catch-all-apply 'vlax-invoke-method (list http 'send json_str))
 
       (if (= (vlax-get-property http 'status) 200) 
-        (princ (strcat "\n[³É¹¦] " (itoa (length data_list)) " ×éÍ¼Ö½Êı¾İÒÑÈë¿â¡£"))
-        (princ (strcat "\n[Ê§°Ü] ·şÎñÆ÷ÏìÓ¦Òì³£: " (itoa (vlax-get-property http 'status))))
+        (princ (strcat "\n[æˆåŠŸ] " (itoa (length data_list)) " ç»„å›¾çº¸æ•°æ®å·²å…¥åº“ã€‚"))
+        (princ (strcat "\n[å¤±è´¥] æœåŠ¡å™¨å“åº”å¼‚å¸¸: " (itoa (vlax-get-property http 'status))))
       )
       (vlax-release-object http)
     )
-    (princ "\n[ÌáÊ¾] Î´²É¼¯µ½ÓĞĞ§Êı¾İ¡£")
+    (princ "\n[æç¤º] æœªé‡‡é›†åˆ°æœ‰æ•ˆæ•°æ®ã€‚")
   )
 )
 
 ;; ==========================================================
-;; 5. ¹«¹²º¯Êı - ÊÕ¼¯ËùÓĞÎÄ×Ö
+;; 5. å…¬å…±å‡½æ•° - æ”¶é›†æ‰€æœ‰æ–‡å­—
 ;; ==========================================================
 (defun collect_all_text_data (/ ss_txt i ed)
   (setq txt_data '())
@@ -272,7 +272,7 @@
 )
 
 ;; ==========================================================
-;; 6. ¹«¹²º¯Êı - É¨Ãè²¢ÌáÈ¡Í¼¿òÊı¾İ
+;; 6. å…¬å…±å‡½æ•° - æ‰«æå¹¶æå–å›¾æ¡†æ•°æ®
 ;; ==========================================================
 (defun scan_and_extract_boxes (/ ss_all i ed vlist p_min p_max area res)
   (setq final_list '() unique_list '())
@@ -304,7 +304,7 @@
 )
 
 ;; ==========================================================
-;; 7. ¹«¹²º¯Êı - µ¥ÕÅPDFµ¼³öºËĞÄÁ÷³Ì
+;; 7. å…¬å…±å‡½æ•° - å•å¼ PDFå¯¼å‡ºæ ¸å¿ƒæµç¨‹
 ;; ==========================================================
 (defun export_single_pdf (ent_out res p1_out p2_out / pdfname path p1_new p2_new 
                           vla_obj_out debug_rect
@@ -318,99 +318,99 @@
   )
 
   ;; ==========================================================
-  ;; 1. ­h¾³ÇĞ“Q
+  ;; 1. ç’°å¢ƒåˆ‡æ›
   ;; ==========================================================
   (command "_.UCS" "_W")
-  (command "_.UCS" "_Z" "90") ; ĞıŞD×ù˜ËÏµ
+  (command "_.UCS" "_Z" "90") ; æ—‹è½‰åº§æ¨™ç³»
 
-  (vl-cmdf "_.PLAN" "_C") ; ÇĞ“QÒ•ˆD
-  (vl-cmdf "_.ZOOM" "_Object" ent_out "") ; ŠÖÆŒ¦½¹ˆD¿ò
+  (vl-cmdf "_.PLAN" "_C") ; åˆ‡æ›è¦–åœ–
+  (vl-cmdf "_.ZOOM" "_Object" ent_out "") ; å¼·åˆ¶å°ç„¦åœ–æ¡†
 
-  ;; ÖØĞÂ«@È¡ĞıŞDááµÄ UCS ´°¿Ú×ø˜Ë
-  ;; --- êPæIĞŞÕı£ºŒ¢Ô­±¾µÄ WCS ücŞD“Qµ½®”Ç° UCS ---
-  ;; p1_out ºÍ p2_out ¼ÙÔOÊÇÄã‚÷Èëº¯”µµÄ WCS ×ù˜Ëüc
-  (setq p1_new (trans p1_out 0 1) ; Ä WCS (0) ŞDµ½®”Ç° UCS (1)
+  ;; é‡æ–°ç²å–æ—‹è½‰å¾Œçš„ UCS çª—å£åæ¨™
+  ;; --- é—œéµä¿®æ­£ï¼šå°‡åŸæœ¬çš„ WCS é»è½‰æ›åˆ°ç•¶å‰ UCS ---
+  ;; p1_out å’Œ p2_out å‡è¨­æ˜¯ä½ å‚³å…¥å‡½æ•¸çš„ WCS åº§æ¨™é»
+  (setq p1_new (trans p1_out 0 1) ; å¾ WCS (0) è½‰åˆ°ç•¶å‰ UCS (1)
         p2_new (trans p2_out 0 1)
-  ) ; Ä WCS (0) ŞDµ½®”Ç° UCS (1)
+  ) ; å¾ WCS (0) è½‰åˆ°ç•¶å‰ UCS (1)
 
   ;; ==========================================================
-  ;; ¡¾Õ{Ô‡é_Ê¼¡¿ÔÚˆDÃæÉÏ®‹³ö´òÓ¡…^Óò¼t¿ò
+  ;; ã€èª¿è©¦é–‹å§‹ã€‘åœ¨åœ–é¢ä¸Šç•«å‡ºæ‰“å°å€åŸŸç´…æ¡†
   ;; ==========================================================
-  (princ "\n[Õ{Ô‡] ÕıÔÚÀLÑu´òÓ¡ß…½ç´_ÕJ¿ò3...")
+  (princ "\n[èª¿è©¦] æ­£åœ¨ç¹ªè£½æ‰“å°é‚Šç•Œç¢ºèªæ¡†3...")
   (entmake 
     (list 
       '(0 . "LWPOLYLINE")
       '(100 . "AcDbEntity")
       '(100 . "AcDbPolyline")
-      '(90 . 4) ; 4‚€í”üc
-      '(70 . 1) ; é]ºÏ
-      '(62 . 1) ; îÉ«é¼tÉ«
+      '(90 . 4) ; 4å€‹é ‚é»
+      '(70 . 1) ; é–‰åˆ
+      '(62 . 1) ; é¡è‰²ç‚ºç´…è‰²
       (cons 10 (list (car p1_new) (cadr p1_new)))
       (cons 10 (list (car p2_new) (cadr p1_new)))
       (cons 10 (list (car p2_new) (cadr p2_new)))
       (cons 10 (list (car p1_new) (cadr p2_new)))
     )
   )
-  (setq debug_rect (entlast)) ; Ó›ä›ß@‚€¼t¿ò
-  (command "_.REGEN") ; ŠÖÆË¢ĞÂï@Ê¾
+  (setq debug_rect (entlast)) ; è¨˜éŒ„é€™å€‹ç´…æ¡†
+  (command "_.REGEN") ; å¼·åˆ¶åˆ·æ–°é¡¯ç¤º
   ;; ==========================================================
-  ;; ¡¾Õ{Ô‡½YÊø¡¿
+  ;; ã€èª¿è©¦çµæŸã€‘
   ;; ==========================================================
 
-  ;; 2. ˆÌĞĞÁĞÓ¡
+  ;; 2. åŸ·è¡Œåˆ—å°
   (if (findfile path) (vl-file-delete path))
 
   (princ 
-    (strcat "\n[ˆÌĞĞ´òÓ¡] ´°¿Úüc: " 
+    (strcat "\n[åŸ·è¡Œæ‰“å°] çª—å£é»: " 
             (vl-princ-to-string p1_new)
-            " ÖÁ "
+            " è‡³ "
             (vl-princ-to-string p2_new)
     )
   )
-  (command "-PLOT" "Y" "" "DWG To PDF.pc3" "ISO full bleed A3 (297.00 x 420.00 ºÁÃ×)" 
+  (command "-PLOT" "Y" "" "DWG To PDF.pc3" "ISO full bleed A3 (297.00 x 420.00 æ¯«ç±³)" 
            "M" "P" "N" "W" "non" p1_new "non" p2_new "F" "C" "Y" "monochrome.ctb" "Y" "A" path 
            "N" "Y"
   )
 
 
   ;; ==========================================================
-  ;; 3. ­h¾³ß€Ô­
+  ;; 3. ç’°å¢ƒé‚„åŸ
   ;; ==========================================================
-  (if debug_rect (entdel debug_rect)) ; Èç¹ûÄãÏë±£Áô¼t¿ò™z²é£¬¾ÍÔ]áŒµôß@Ò»ĞĞ
+  (if debug_rect (entdel debug_rect)) ; å¦‚æœä½ æƒ³ä¿ç•™ç´…æ¡†æª¢æŸ¥ï¼Œå°±è¨»é‡‹æ‰é€™ä¸€è¡Œ
   (command "_.UCS" "_W")
   (command "_.PLAN" "_W")
 
-  (princ (strcat "\n[³É¹¦Œ§³ö] " pdfname))
+  (princ (strcat "\n[æˆåŠŸå°å‡º] " pdfname))
 )
 (defun c:DelOLE (/ ss i ent)
   (vl-load-com)
-  (princ "\nÕıÔÚ’ßÃèK„h³ıÈ«¾Ö OLE ˆDÆ¬...")
+  (princ "\næ­£åœ¨æƒæä¸¦åˆªé™¤å…¨å±€ OLE åœ–ç‰‡...")
   
-  ;; Ê¹ÓÃ ssget "X" ßMĞĞÈ«¾ÖËÑË÷£¬ß^V—l¼şé OLE2FRAME
+  ;; ä½¿ç”¨ ssget "X" é€²è¡Œå…¨å±€æœç´¢ï¼Œéæ¿¾æ¢ä»¶ç‚º OLE2FRAME
   (if (setq ss (ssget "X" '((0 . "OLE2FRAME"))))
     (progn
       (setq i 0)
       (repeat (sslength ss)
         (setq ent (ssname ss i))
-        (entdel ent) ; ˆÌĞĞ„h³ı
+        (entdel ent) ; åŸ·è¡Œåˆªé™¤
         (setq i (1+ i))
       )
-      (princ (strcat "\n[³É¹¦] ÒÑ„h³ı " (itoa i) " ‚€ OLE Îï¼ş¡£"))
+      (princ (strcat "\n[æˆåŠŸ] å·²åˆªé™¤ " (itoa i) " å€‹ OLE ç‰©ä»¶ã€‚"))
     )
-    (princ "\n[ÌáÊ¾] ˆD™nÖĞÎ´°l¬F OLE Îï¼ş¡£")
+    (princ "\n[æç¤º] åœ–æª”ä¸­æœªç™¼ç¾ OLE ç‰©ä»¶ã€‚")
   )
-  (command "_.REGEN") ; Ë¢ĞÂï@Ê¾
+  (command "_.REGEN") ; åˆ·æ–°é¡¯ç¤º
   (princ)
 )
 (princ)
 ;; ==========================================================
-;; 8. BEXK ÃüÁî - ¿òÑ¡ÉÏ´«£¨±£ÁôÔ­ÓĞÂß¼­£©
+;; 8. BEXK å‘½ä»¤ - æ¡†é€‰ä¸Šä¼ ï¼ˆä¿ç•™åŸæœ‰é€»è¾‘ï¼‰
 ;; ==========================================================
 (defun c:BEXK (/ ss_pick i ed vlist p_min p_max area res unique_list final_list)
   (setvar "CMDECHO" 0)
   (setq final_list '() unique_list '())
 
-  (princ "\nÇë¿òÑ¡ĞèÒªÌáÈ¡µÄÍ¼¿òÇøÓò...")
+  (princ "\nè¯·æ¡†é€‰éœ€è¦æå–çš„å›¾æ¡†åŒºåŸŸ...")
   (if (setq ss_pick (ssget '((0 . "LWPOLYLINE") (70 . 1)))) 
     (progn 
       (setq txt_data (collect_all_text_data))
@@ -436,33 +436,33 @@
         (setq i (1+ i))
       )
       
-      (princ (strcat "\n¹²ÌáÈ¡ " (itoa (length final_list)) " ¸öÓĞĞ§Í¼¿ò¡£"))
-      (upload_to_backend final_list)   ; ÒÑ×¢ÊÍ£¬±£³ÖÔ­Ñù
+      (princ (strcat "\nå…±æå– " (itoa (length final_list)) " ä¸ªæœ‰æ•ˆå›¾æ¡†ã€‚"))
+      (upload_to_backend final_list)   ; å·²æ³¨é‡Šï¼Œä¿æŒåŸæ ·
     )
-    (princ "\n[È¡Ïû] Î´Ñ¡ÖĞÈÎºÎ±ÕºÏ¶à¶ÎÏß¡£")
+    (princ "\n[å–æ¶ˆ] æœªé€‰ä¸­ä»»ä½•é—­åˆå¤šæ®µçº¿ã€‚")
   )
   (princ)
 )
 
 ;; ==========================================================
-;; 9. EXK ÃüÁî - È«Í¼×Ô¶¯É¨Ãè²¢ÉÏ´«
+;; 9. EXK å‘½ä»¤ - å…¨å›¾è‡ªåŠ¨æ‰«æå¹¶ä¸Šä¼ 
 ;; ==========================================================
 (defun c:EXK (/ final_list)
   (setvar "CMDECHO" 0)
-  (princ "\n[ÏµÍ³] ÕıÔÚÆô¶¯È«Í¼×Ô¶¯É¨Ãè (µ÷ÊÔÄ£Ê½)...")
+  (princ "\n[ç³»ç»Ÿ] æ­£åœ¨å¯åŠ¨å…¨å›¾è‡ªåŠ¨æ‰«æ (è°ƒè¯•æ¨¡å¼)...")
 
   (setq txt_data (collect_all_text_data))
   (setq final_list (scan_and_extract_boxes))
 
   (if (> (length final_list) 0)
     (progn
-      (princ "\n\n==================== ×Ô¶¯ÌáÈ¡½á¹ûÔ¤ÀÀ ====================")
-      (princ (strcat "\nµ±Ç°Í¼Ö½: " (getvar "DWGNAME")))
-      (princ (strcat "\n¹²·¢ÏÖÓĞĞ§Í¼¿ò: " (itoa (length final_list)) " ¸ö"))
+      (princ "\n\n==================== è‡ªåŠ¨æå–ç»“æœé¢„è§ˆ ====================")
+      (princ (strcat "\nå½“å‰å›¾çº¸: " (getvar "DWGNAME")))
+      (princ (strcat "\nå…±å‘ç°æœ‰æ•ˆå›¾æ¡†: " (itoa (length final_list)) " ä¸ª"))
       (princ "\n----------------------------------------------------------")
       (upload_to_backend final_list)
     )
-    (princ "\n[ÌáÊ¾] É¨ÃèÍê³É£¬µ«Ã»ÓĞÕÒµ½·ûºÏÌõ¼şµÄÍ¼Ö½Êı¾İ¡£")
+    (princ "\n[æç¤º] æ‰«æå®Œæˆï¼Œä½†æ²¡æœ‰æ‰¾åˆ°ç¬¦åˆæ¡ä»¶çš„å›¾çº¸æ•°æ®ã€‚")
   )
   (princ)
 )
@@ -472,22 +472,22 @@
                    ) 
   (vl-load-com)
   (setvar "CMDECHO" 0)
-  ;;È«¾ÖêPé]ˆDÆ¬ß…¿ò´òÓ¡
+  ;;å…¨å±€é—œé–‰åœ–ç‰‡é‚Šæ¡†æ‰“å°
   (setvar "IMAGEFRAME" 2)
-   ;; 1. »ñÈ¡×ÀÃæÂ·¾¶
+   ;; 1. è·å–æ¡Œé¢è·¯å¾„
   (setq userProfile (getenv "USERPROFILE"))
-  (setq picPath (strcat userProfile "\\Desktop\\Ç©Ãû"))
-  ;; (setq picPath "\\\\192.168.1.100\\SJWH\\Ç©Ãû")
-  ;; ¶¨ÒåÎÄ¼şÃû£¨ÇëÈ·±£×ÀÃæÎÄ¼şÃû×¼È·£©
-  (setq files '("Éè¼ÆÇ©Ãû.png" "Ğ£¶ÔÇ©Ãû.png" "ÉóºËÇ©Ãû.png"))
+  (setq picPath (strcat userProfile "\\Desktop\\ç­¾å"))
+  ;; (setq picPath "\\\\192.168.1.100\\SJWH\\ç­¾å")
+  ;; å®šä¹‰æ–‡ä»¶åï¼ˆè¯·ç¡®ä¿æ¡Œé¢æ–‡ä»¶åå‡†ç¡®ï¼‰
+  (setq files '("è®¾è®¡ç­¾å.png" "æ ¡å¯¹ç­¾å.png" "å®¡æ ¸ç­¾å.png"))
 
-  ;; 2. Ñ¡È¡µÚÒ»¸ö¾ØĞÎ¿ò£¨Éè¼ÆÇ©Ãû£©
+  ;; 2. é€‰å–ç¬¬ä¸€ä¸ªçŸ©å½¢æ¡†ï¼ˆè®¾è®¡ç­¾åï¼‰
   (initget 1)
-  (setq pt1 (getpoint "\nÖ¸¶¨[Éè¼ÆÇ©Ãû]¾ØĞÎ×óÉÏ½Ç: "))
+  (setq pt1 (getpoint "\næŒ‡å®š[è®¾è®¡ç­¾å]çŸ©å½¢å·¦ä¸Šè§’: "))
   (initget 1)
-  (setq pt2 (getcorner pt1 "\nÖ¸¶¨[Éè¼ÆÇ©Ãû]¾ØĞÎÓÒÏÂ½Ç: "))
+  (setq pt2 (getcorner pt1 "\næŒ‡å®š[è®¾è®¡ç­¾å]çŸ©å½¢å³ä¸‹è§’: "))
 
-  ;; ¼ÆËã»ù´¡¿í¡¢¸ß¼°ÖĞĞÄµã
+  ;; è®¡ç®—åŸºç¡€å®½ã€é«˜åŠä¸­å¿ƒç‚¹
   (setq w (abs (- (car pt1) (car pt2))))
   (setq h (abs (- (cadr pt1) (cadr pt2))))
   (setq center_rect (list (/ (+ (car pt1) (car pt2)) 2.0) 
@@ -496,49 +496,49 @@
                     )
   )
 
-  ;; 3. Ñ­»·²åÈë
+  ;; 3. å¾ªç¯æ’å…¥
   (setq i 0)
   (foreach fileName files 
     (setq fullPath (strcat picPath "\\" fileName))
 
     (if (findfile fullPath) 
       (progn 
-        ;; ¼ÆËãµ±Ç°Ç©ÃûµÄÄ¿±êÎ»ÖÃ£¨ÏòÏÂµÈ¾àÆ«ÒÆ£©
+        ;; è®¡ç®—å½“å‰ç­¾åçš„ç›®æ ‡ä½ç½®ï¼ˆå‘ä¸‹ç­‰è·åç§»ï¼‰
         (setq target_center (list (car center_rect) 
                                   (- (cadr center_rect) (* i h))
                                   0.0
                             )
         )
 
-        ;; A. ²åÈëÍ¼Æ¬
+        ;; A. æ’å…¥å›¾ç‰‡
         (setvar "FILEDIA" 0)
         (command "_-IMAGE" "_Attach" fullPath (list 0 0 0) "1" "0")
         (setq imgEnt (entlast))
         (setvar "FILEDIA" 1)
 
-        ;; B. ²âÁ¿³ß´ç
+        ;; B. æµ‹é‡å°ºå¯¸
         (setq vlaImg (vlax-ename->vla-object imgEnt))
         (vla-update vlaImg)
         (vla-getboundingbox vlaImg 'min_ext 'max_ext)
 
-        ;; ½« safearray ×ª»»ÎªÆÕÍ¨ list
+        ;; å°† safearray è½¬æ¢ä¸ºæ™®é€š list
         (setq min_list (vlax-safearray->list min_ext))
         (setq max_list (vlax-safearray->list max_ext))
 
         (setq cur_w (- (car max_list) (car min_list)))
         (setq cur_h (- (cadr max_list) (cadr min_list)))
 
-        ;; C. ¼ÆËã±ÈÀı (¿í¶È100%Ìî³ä£¬¸ß¶È·ÀÒç³ö)
+        ;; C. è®¡ç®—æ¯”ä¾‹ (å®½åº¦100%å¡«å……ï¼Œé«˜åº¦é˜²æº¢å‡º)
         (setq scale_final (/ w cur_w))
         (if (> (* cur_h scale_final) h) 
           (setq scale_final (/ h cur_h))
         )
 
-        ;; D. Ëõ·Å
+        ;; D. ç¼©æ”¾
         (vla-ScaleEntity vlaImg (vlax-3d-point (list 0 0 0)) scale_final)
 
-        ;; E. ¾«È·¾ÓÖĞÒÆ¶¯
-        ;; ÖØĞÂ»ñÈ¡Ëõ·ÅºóµÄÖĞĞÄµã
+        ;; E. ç²¾ç¡®å±…ä¸­ç§»åŠ¨
+        ;; é‡æ–°è·å–ç¼©æ”¾åçš„ä¸­å¿ƒç‚¹
         (vla-getboundingbox vlaImg 'min_ext 'max_ext)
         (setq min_list (vlax-safearray->list min_ext))
         (setq max_list (vlax-safearray->list max_ext))
@@ -552,51 +552,51 @@
 
         (vla-Move vlaImg img_center (vlax-3d-point target_center))
 
-        ;; F. ¿ªÆôÍ¸Ã÷
+        ;; F. å¼€å¯é€æ˜
         (vla-put-Transparency vlaImg :vlax-true)
-        (princ (strcat "\nÒÑÍê³É: " fileName))
+        (princ (strcat "\nå·²å®Œæˆ: " fileName))
       )
-      (princ (strcat "\nÌø¹ı£¨Î´ÕÒµ½ÎÄ¼ş£©: " fileName))
+      (princ (strcat "\nè·³è¿‡ï¼ˆæœªæ‰¾åˆ°æ–‡ä»¶ï¼‰: " fileName))
     )
-    (setq i (1+ i)) ; µİÔöË÷Òı£¬¿ØÖÆ´¹Ö±Î»ÖÃ
+    (setq i (1+ i)) ; é€’å¢ç´¢å¼•ï¼Œæ§åˆ¶å‚ç›´ä½ç½®
   )
 
   (setvar "CMDECHO" 1)
-  (princ "\nÅúÁ¿²åÈëÈÎÎñ½áÊø¡£")
+  (princ "\næ‰¹é‡æ’å…¥ä»»åŠ¡ç»“æŸã€‚")
   (princ)
 )
 
-(princ "\n¼ÓÔØ³É¹¦¡£ÊäÈë SignBatch ÅúÁ¿²åÈëÈı¸öÇ©Ãû¡£")
+(princ "\nåŠ è½½æˆåŠŸã€‚è¾“å…¥ SignBatch æ‰¹é‡æ’å…¥ä¸‰ä¸ªç­¾åã€‚")
 ;; ==========================================================
-;; 4. GTA ÃüÁî - ÌáÈ¡Êı¾İ²¢µ¼³ö´ø ZOOM ÃüÁîµÄ TXT
+;; 4. GTA å‘½ä»¤ - æå–æ•°æ®å¹¶å¯¼å‡ºå¸¦ ZOOM å‘½ä»¤çš„ TXT
 ;; ==========================================================
 (defun c:GTA (/ final_list filename file_ptr row item_str cur_x cur_y zoom_cmd)
   (setvar "CMDECHO" 0)
-  (princ "\n[ÏµÍ³] ÕıÔÚÆô¶¯È«Í¼É¨ÃèÓëÊı¾İÌáÈ¡...")
+  (princ "\n[ç³»ç»Ÿ] æ­£åœ¨å¯åŠ¨å…¨å›¾æ‰«æä¸æ•°æ®æå–...")
 
   (setq txt_data (collect_all_text_data))
   (setq final_list (scan_and_extract_boxes))
 
   (if (and final_list (> (length final_list) 0)) 
     (progn 
-      (setq filename (getfiled "µ¼³öÊı¾İÎª TXT ÎÄ¼ş" "ÎïÁÏÇåµ¥_´ø¶¨Î»ÃüÁî" "txt" 1))
+      (setq filename (getfiled "å¯¼å‡ºæ•°æ®ä¸º TXT æ–‡ä»¶" "ç‰©æ–™æ¸…å•_å¸¦å®šä½å‘½ä»¤" "txt" 1))
       (if filename
         (progn
           (setq file_ptr (open filename "w"))
-          ;; Ğ´Èë±íÍ·
-          (write-line "ÎïÁÏ±àÂë | ÎïÁÏ±àÂë | Í¼ºÅ | ²úÆ·±àÂë | ZOOMÃüÁî" file_ptr)
+          ;; å†™å…¥è¡¨å¤´
+          (write-line "ç‰©æ–™ç¼–ç  | ç‰©æ–™ç¼–ç  | å›¾å· | äº§å“ç¼–ç  | ZOOMå‘½ä»¤" file_ptr)
           
           (foreach row (reverse final_list) 
             (setq cur_x (nth 3 row) cur_y (nth 4 row))
             
-            ;; ¹¹Ôì ZOOM ÃüÁî×Ö·û´®
+            ;; æ„é€  ZOOM å‘½ä»¤å­—ç¬¦ä¸²
             (setq zoom_cmd (strcat "ZOOM C " cur_x "," cur_y " 500"))
             
-            ;; ÊµÊ±ÊÓÍ¼¶¨Î»·´À¡
+            ;; å®æ—¶è§†å›¾å®šä½åé¦ˆ
             (command "_.ZOOM" "C" (list (atof cur_x) (atof cur_y)) 500)
-            (princ (strcat "\n¶¨Î»ÖÁÎïÁÏ: " (nth 0 row)))
+            (princ (strcat "\nå®šä½è‡³ç‰©æ–™: " (nth 0 row)))
 
-            ;; ¹¹ÔìĞ´Èë TXT µÄÊı¾İĞĞ
+            ;; æ„é€ å†™å…¥ TXT çš„æ•°æ®è¡Œ
             (setq item_str (strcat 
                              (nth 0 row) " | " 
                              (nth 1 row) " | " 
@@ -607,30 +607,30 @@
           )
           
           (close file_ptr)
-          (princ (strcat "\n\n[³É¹¦] Êı¾İÒÑ±£´æÖÁ: " filename))
+          (princ (strcat "\n\n[æˆåŠŸ] æ•°æ®å·²ä¿å­˜è‡³: " filename))
           (command "_.ZOOM" "E")
         )
-        (princ "\n[ÌáÊ¾] ²Ù×÷ÒÑÈ¡Ïû¡£")
+        (princ "\n[æç¤º] æ“ä½œå·²å–æ¶ˆã€‚")
       )
     )
-    (princ "\n[´íÎó] Î´ÄÜÊ¶±ğµ½·ûºÏÌõ¼şµÄÍ¼Ö½Êı¾İ¡£")
+    (princ "\n[é”™è¯¯] æœªèƒ½è¯†åˆ«åˆ°ç¬¦åˆæ¡ä»¶çš„å›¾çº¸æ•°æ®ã€‚")
   )
   (princ)
 )
 
 ;; ==========================================================
-;; 11. set_clipboard º¯Êı
+;; 11. set_clipboard å‡½æ•°
 ;; ==========================================================
 (defun set_clipboard (str / html result) 
   (setq html (vlax-create-object "htmlfile"))
   (setq result (vlax-invoke (vlax-get (vlax-get html 'ParentWindow) 'ClipBoardData) 
                             'setData "Text" str))
   (vlax-release-object html)
-  (princ "\n[ÏµÍ³] ÄÚÈİÒÑ³É¹¦¸´ÖÆµ½¼ôÇĞ°å¡£")
+  (princ "\n[ç³»ç»Ÿ] å†…å®¹å·²æˆåŠŸå¤åˆ¶åˆ°å‰ªåˆ‡æ¿ã€‚")
 )
 
 ;; ==========================================================
-;; 12. ESPDF ÃüÁî - ÊÖ¶¯Ñ¡ÔñÍâ¿òµ¼³öPDF
+;; 12. ESPDF å‘½ä»¤ - æ‰‹åŠ¨é€‰æ‹©å¤–æ¡†å¯¼å‡ºPDF
 ;; ==========================================================
 (defun c:ESPDF (/ ss_pick i ent_out vla_obj_out p1_out p2_out out_area cen 
                  ss_inner k obj_in in_ed in_vlist in_min in_max in_area ratio res)
@@ -640,7 +640,7 @@
   (setvar "CMDECHO" 0) (setvar "OSMODE" 0)
 
   (setq txt_data '() desktop (strcat (getenv "USERPROFILE") "\\Desktop\\"))
-  (princ "\n[ÏµÍ³] ÇëÑ¡ÔñÍ¼Ö½¡¾×îÍâÈ¦´òÓ¡±ß¿ò¡¿(¿É¶àÑ¡)...")
+  (princ "\n[ç³»ç»Ÿ] è¯·é€‰æ‹©å›¾çº¸ã€æœ€å¤–åœˆæ‰“å°è¾¹æ¡†ã€‘(å¯å¤šé€‰)...")
 
   (setq txt_data (collect_all_text_data))
 
@@ -681,9 +681,9 @@
         )
         (setq i (1+ i))
       )
-      (princ "\n[Íê³É] ËùÓĞÑ¡ÖĞÍ¼Ö½ÒÑ´¦ÀíÍê±Ï¡£")
+      (princ "\n[å®Œæˆ] æ‰€æœ‰é€‰ä¸­å›¾çº¸å·²å¤„ç†å®Œæ¯•ã€‚")
     )
-    (princ "\n[È¡Ïû] Î´Ñ¡ÖĞÓĞĞ§Íâ¿ò¡£")
+    (princ "\n[å–æ¶ˆ] æœªé€‰ä¸­æœ‰æ•ˆå¤–æ¡†ã€‚")
   )
 
   (setvar "CMDECHO" old_cmdecho)
@@ -692,60 +692,55 @@
 )
 
 ;; ==========================================================
-;; 13. ESA ÃüÁî - È«Í¼×Ô¶¯ÅúÁ¿µ¼³öPDF
+;; 13. ESA å‘½ä»¤ - å…¨å›¾è‡ªåŠ¨æ‰¹é‡å¯¼å‡ºPDF
 ;; ==========================================================
-(defun c:ESA (/ ss_all i ent_out ed_out vlist_out p1_out p2_out out_area cen 
-               ss_inner k obj_in in_ed in_vlist in_min in_max in_area ratio res)
+(defun c:ESA (/ ss_all i ent_box ed vlist p1 p2 area res old_cmdecho old_osmode)
   
   (vl-load-com)
-  (setq old_cmdecho (getvar "CMDECHO") old_osmode (getvar "OSMODE"))
-  (setvar "CMDECHO" 0) (setvar "OSMODE" 0)
+  (setq old_cmdecho (getvar "CMDECHO") 
+        old_osmode (getvar "OSMODE"))
+  (setvar "CMDECHO" 0) 
+  (setvar "OSMODE" 0)
 
-  (setq txt_data '() desktop (strcat (getenv "USERPROFILE") "\\Desktop\\"))
-  (princ "\n[ÏµÍ³] ÕıÔÚÆô¶¯È«Í¼×Ô¶¯É¨Ãèµ¼³ö...")
-
+  (princ "\n[ç³»ç»Ÿ] æ­£åœ¨å¯åŠ¨å…¨å›¾è‡ªåŠ¨æ‰«æå¯¼å‡º...")
+  
+  ;; 1. é¢„è½½æ–‡å­—æ•°æ® (å‡è®¾è¿™æ˜¯ä½ å®šä¹‰çš„å…¨å±€å‡½æ•°)
   (setq txt_data (collect_all_text_data))
 
+  ;; 2. æ‰«ææ‰€æœ‰é—­åˆçš„ä¼˜åŒ–å¤šæ®µçº¿ (LWPOLYLINE)
   (if (setq ss_all (ssget "X" '((0 . "LWPOLYLINE") (70 . 1)))) 
     (progn 
       (setq i 0)
       (repeat (sslength ss_all) 
-        (setq ent_out (ssname ss_all i)
-              ed_out (entget ent_out)
-              vlist_out (mapcar 'cdr (vl-remove-if-not '(lambda (x) (= 10 (car x))) ed_out))
-              p1_out (list (apply 'min (mapcar 'car vlist_out)) (apply 'min (mapcar 'cadr vlist_out)))
-              p2_out (list (apply 'max (mapcar 'car vlist_out)) (apply 'max (mapcar 'cadr vlist_out)))
-              out_area (abs (* (- (car p2_out) (car p1_out)) (- (cadr p2_out) (cadr p1_out))))
-              vla_obj_out (vlax-ename->vla-object ent_out))
+        (setq ent_box (ssname ss_all i)
+              ed (entget ent_box)
+              ;; æå–é¡¶ç‚¹
+              vlist (mapcar 'cdr (vl-remove-if-not '(lambda (x) (= 10 (car x))) ed))
+              ;; è®¡ç®—å¤–æ¥çŸ©å½¢
+              p1 (list (apply 'min (mapcar 'car vlist)) (apply 'min (mapcar 'cadr vlist)))
+              p2 (list (apply 'max (mapcar 'car vlist)) (apply 'max (mapcar 'cadr vlist)))
+              ;; è®¡ç®—é¢ç§¯
+              area (abs (* (- (car p2) (car p1)) (- (cadr p2) (cadr p1)))))
 
-        (if (and (> out_area 800000.0) (< out_area 800000000.0))
-          (if (setq ss_inner (ssget "C" p1_out p2_out '((0 . "LWPOLYLINE") (70 . 1))))
-            (progn
-              (setq k 0)
-              (repeat (sslength ss_inner)
-                (setq obj_in (ssname ss_inner k)
-                      in_ed (entget obj_in)
-                      in_vlist (mapcar 'cdr (vl-remove-if-not '(lambda (x) (= 10 (car x))) in_ed))
-                      in_min (list (apply 'min (mapcar 'car in_vlist)) (apply 'min (mapcar 'cadr in_vlist)))
-                      in_max (list (apply 'max (mapcar 'car in_vlist)) (apply 'max (mapcar 'cadr in_vlist)))
-                      in_area (abs (* (- (car in_max) (car in_min)) (- (cadr in_max) (cadr in_min))))
-                      ratio (/ in_area out_area))
-
-                (if (and (> ratio 0.85) (< ratio 0.98))
-                  (if (setq res (process_single_box in_min in_max))
-                    (export_single_pdf ent_out res p1_out p2_out)
-                  )
-                )
-                (setq k (1+ k))
+        ;; 3. ä½¿ç”¨ä¸ scan_and_extract_boxes ä¸€è‡´çš„é¢ç§¯è¿‡æ»¤é˜ˆå€¼
+        ;; è¿™é‡Œç»Ÿä¸€ä½¿ç”¨ 500,000.0 (æŒ‰éœ€è°ƒæ•´)
+        (if (and (> area 500000.0) (< area 800000000.0))
+          (progn
+            ;; 4. è°ƒç”¨å¤„ç†å•æ¡†çš„é€»è¾‘ (è·å–æ–‡ä»¶åç­‰ä¿¡æ¯)
+            (if (setq res (process_single_box p1 p2))
+              (progn
+                ;; 5. æ‰§è¡Œå¯¼å‡º (ä¼ å…¥å›¾å…ƒã€å¤„ç†ç»“æœå’Œåæ ‡)
+                (export_single_pdf ent_box res p1 p2)
+                (princ (strcat "\n[æˆåŠŸ] å·²å¤„ç†: " (car res)))
               )
             )
           )
         )
         (setq i (1+ i))
       )
-      (princ "\n[Íê³É] È«Í¼ÅúÁ¿µ¼³öÈÎÎñ½áÊø¡£")
+      (princ "\n[å®Œæˆ] å…¨å›¾æ‰¹é‡å¯¼å‡ºä»»åŠ¡ç»“æŸã€‚")
     )
-    (princ "\n[´íÎó] Î´ÄÜÊ¶±ğµ½·ûºÏÃæ»ıÒªÇóµÄÍ¼¿ò¡£")
+    (princ "\n[é”™è¯¯] æœªèƒ½è¯†åˆ«åˆ°ç¬¦åˆé¢ç§¯è¦æ±‚çš„å›¾æ¡†ã€‚")
   )
 
   (setvar "CMDECHO" old_cmdecho)
@@ -753,11 +748,11 @@
   (princ)
 )
 ;; ==========================================================
-;; 14. CA ÃüÁî - ÌáÈ¡Êı¾İ²¢Æ´½Ó×Ö·û´®µ½¼ôÇĞ°å
+;; 14. CA å‘½ä»¤ - æå–æ•°æ®å¹¶æ‹¼æ¥å­—ç¬¦ä¸²åˆ°å‰ªåˆ‡æ¿
 ;; ==========================================================
 (defun c:CA (/ final_list res_str item m_code d_num p_code)
   (setvar "CMDECHO" 0)
-  (princ "\n[ÏµÍ³] ÕıÔÚÉ¨ÃèÍ¼Ö½²¢Éú³ÉÆ´½Ó×Ö·û´®...")
+  (princ "\n[ç³»ç»Ÿ] æ­£åœ¨æ‰«æå›¾çº¸å¹¶ç”Ÿæˆæ‹¼æ¥å­—ç¬¦ä¸²...")
 
   (setq txt_data (collect_all_text_data))
   (setq final_list (scan_and_extract_boxes))
@@ -766,37 +761,37 @@
     (progn
       (setq res_str "")
       (foreach item (reverse final_list)
-        (setq m_code (nth 0 item)           ; ÎïÁÏ±àÂë
-              d_num  (nth 1 item)           ; Í¼ºÅ
-              p_code (nth 2 item))          ; ²úÆ·±àÂë
+        (setq m_code (nth 0 item)           ; ç‰©æ–™ç¼–ç 
+              d_num  (nth 1 item)           ; å›¾å·
+              p_code (nth 2 item))          ; äº§å“ç¼–ç 
 
-        ;; ½«Í¼ºÅÖĞµÄ / ×ª»»Îª -
+        ;; å°†å›¾å·ä¸­çš„ / è½¬æ¢ä¸º -
         (while (vl-string-search "/" d_num)
           (setq d_num (vl-string-subst "-" "/" d_num))
         )
 
-        ;; Æ´½ÓÃ¿×éÊı¾İ£ºÎïÁÏ±àÂë-Í¼ºÅ-²úÆ·±àÂë
+        ;; æ‹¼æ¥æ¯ç»„æ•°æ®ï¼šç‰©æ–™ç¼–ç -å›¾å·-äº§å“ç¼–ç 
         (setq res_str (strcat res_str m_code "-" d_num "-" p_code "\n"))
       )
 
-      ;; µ÷ÓÃ¼ôÇĞ°åº¯Êı
+      ;; è°ƒç”¨å‰ªåˆ‡æ¿å‡½æ•°
       (set_clipboard res_str)
-      (princ (strcat "\n[³É¹¦] ÒÑÌáÈ¡ " (itoa (length final_list)) " ×éÊı¾İ²¢¸´ÖÆµ½¼ôÇĞ°å¡£"))
+      (princ (strcat "\n[æˆåŠŸ] å·²æå– " (itoa (length final_list)) " ç»„æ•°æ®å¹¶å¤åˆ¶åˆ°å‰ªåˆ‡æ¿ã€‚"))
     )
-    (princ "\n[´íÎó] Î´ÄÜÊ¶±ğµ½·ûºÏÌõ¼şµÄÍ¼Ö½Êı¾İ¡£")
+    (princ "\n[é”™è¯¯] æœªèƒ½è¯†åˆ«åˆ°ç¬¦åˆæ¡ä»¶çš„å›¾çº¸æ•°æ®ã€‚")
   )
   (princ)
 )
 
-;; ÈÈ¸üĞÂ¿ì½İ¼ü
+;; çƒ­æ›´æ–°å¿«æ·é”®
 (setq _current_lsp_path "C:/Users/19746/Desktop/node/extract_data.lsp") 
 (defun c:EAD ()
   (load _current_lsp_path)
-  (princ (strcat "\n[ÈÈ¸üĞÂ] ÒÑÖØÔØ: " _current_lsp_path))
+  (princ (strcat "\n[çƒ­æ›´æ–°] å·²é‡è½½: " _current_lsp_path))
   (princ)
 )
 ;; ==========================================================
-;; 15. EJSON ÃüÁî - È«Í¼ÌáÈ¡²¢¸ñÊ½»¯±£´æ JSON (ĞŞ¸´¼ÓÔØÊ§°Ü°æ±¾)
+;; 15. EJSON å‘½ä»¤ - å…¨å›¾æå–å¹¶æ ¼å¼åŒ–ä¿å­˜ JSON (ä¿®å¤åŠ è½½å¤±è´¥ç‰ˆæœ¬)
 ;; ==========================================================
 (defun c:EJSON (/ desktop json_file dwg_path txt_data final_list new_block 
                  first_item item m_code d_num p_code cur_x cur_y zoom_cmd 
@@ -804,21 +799,21 @@
   (setvar "CMDECHO" 0)
   (vl-load-com)
   
-  ;; »ñÈ¡×ÀÃæÂ·¾¶ºÍÎÄ¼şÂ·¾¶
+  ;; è·å–æ¡Œé¢è·¯å¾„å’Œæ–‡ä»¶è·¯å¾„
   (setq desktop (strcat (getenv "USERPROFILE") "\\Desktop\\"))
   (setq json_file (strcat desktop "drawings_data.json"))
   (setq dwg_path (strcat (getvar "DWGPREFIX") (getvar "DWGNAME")))
   (setq dwg_path (vl-string-translate "\\" "/" dwg_path))
 
-  (princ "\n[ÏµÍ³] ÕıÔÚÉ¨ÃèÍ¼Ö½²¢Éú³É JSON...")
+  (princ "\n[ç³»ç»Ÿ] æ­£åœ¨æ‰«æå›¾çº¸å¹¶ç”Ÿæˆ JSON...")
 
-  ;; 1. »ñÈ¡Êı¾İ (È·±£µ÷ÓÃÒÑÓĞµÄº¯Êı)
+  ;; 1. è·å–æ•°æ® (ç¡®ä¿è°ƒç”¨å·²æœ‰çš„å‡½æ•°)
   (setq txt_data (collect_all_text_data))
   (setq final_list (scan_and_extract_boxes))
 
   (if (and final_list (> (length final_list) 0))
     (progn
-      ;; 2. ¹¹Ôìµ±Ç°Í¼Ö½µÄ JSON ¿é (±£³Ö GBK ×Ö½ÚÁ÷)
+      ;; 2. æ„é€ å½“å‰å›¾çº¸çš„ JSON å— (ä¿æŒ GBK å­—èŠ‚æµ)
       (setq new_block (strcat "  {\n"
                               "    \"filePath\": \"" dwg_path "\",\n"
                               "    \"list\": [\n"))
@@ -845,7 +840,7 @@
       )
       (setq new_block (strcat new_block "\n    ]\n" "  }"))
 
-      ;; 3. ¶ÁÈ¡²¢ºÏ²¢¾ÉÎÄ¼şÄÚÈİ
+      ;; 3. è¯»å–å¹¶åˆå¹¶æ—§æ–‡ä»¶å†…å®¹
       (setq all_content "")
       (if (findfile json_file)
         (progn
@@ -855,7 +850,7 @@
           )
           (close f_read)
           
-          ;; ÒÆ³ı¾ÉÎÄ¼ş½áÎ²µÄ ]
+          ;; ç§»é™¤æ—§æ–‡ä»¶ç»“å°¾çš„ ]
           (setq all_content (vl-string-right-trim " \n\r\t]" all_content))
           (if (and all_content (> (strlen all_content) 1))
             (setq all_content (strcat all_content ",\n" new_block "\n]"))
@@ -865,78 +860,78 @@
         (setq all_content (strcat "[\n" new_block "\n]"))
       )
 
-      ;; 4. Ğ´ÈëÎÄ¼ş
+      ;; 4. å†™å…¥æ–‡ä»¶
       (setq f_write (open json_file "w"))
       (if f_write
         (progn
           (princ all_content f_write)
           (close f_write)
-          (princ (strcat "\n[³É¹¦] Êı¾İÒÑĞ´Èë: " json_file))
+          (princ (strcat "\n[æˆåŠŸ] æ•°æ®å·²å†™å…¥: " json_file))
         )
-        (princ "\n[´íÎó] ÎŞ·¨´ò¿ªĞ´ÈëÎÄ¼ş£¬¿ÉÄÜ±»ÆäËû³ÌĞòÕ¼ÓÃ¡£")
+        (princ "\n[é”™è¯¯] æ— æ³•æ‰“å¼€å†™å…¥æ–‡ä»¶ï¼Œå¯èƒ½è¢«å…¶ä»–ç¨‹åºå ç”¨ã€‚")
       )
     )
-    (princ "\n[ÌáÊ¾] Î´ÕÒµ½·ûºÏÌõ¼şµÄÊı¾İ¡£")
+    (princ "\n[æç¤º] æœªæ‰¾åˆ°ç¬¦åˆæ¡ä»¶çš„æ•°æ®ã€‚")
   )
   (princ)
 )
-(defun c:DeleteAll () (MyQuickDelete nil))    ; È«¾ÖÒ»¼üÇåÀí
-(defun c:DeleteSelect () (MyQuickDelete T))   ; ¿òÑ¡ÇåÀí¾Ö²¿
+(defun c:DeleteAll () (MyQuickDelete nil))    ; å…¨å±€ä¸€é”®æ¸…ç†
+(defun c:DeleteSelect () (MyQuickDelete T))   ; æ¡†é€‰æ¸…ç†å±€éƒ¨
 
 (defun MyQuickDelete (useSelect / ss filter cnt)
   (vl-load-com)
-  (princ "\nÕıÔÚÖ´ĞĞÈ«ÄÜÇåÀí£¨°üº¬Ë«µã»®Ïß¡¢Ï¸ÊµÏß¡¢ÖĞĞÄÏß¡¢ÉóºËÍ¼²ãµÈ£©...")
+  (princ "\næ­£åœ¨æ‰§è¡Œå…¨èƒ½æ¸…ç†ï¼ˆåŒ…å«åŒç‚¹åˆ’çº¿ã€ç»†å®çº¿ã€ä¸­å¿ƒçº¿ã€å®¡æ ¸å›¾å±‚ç­‰ï¼‰...")
   
-  ;; 1. ¹¹½¨×éºÏ¹ıÂËÆ÷
+  ;; 1. æ„å»ºç»„åˆè¿‡æ»¤å™¨
   (setq filter 
     '((-4 . "<OR")
-        (0 . "DIMENSION")         ; ±ê×¢
-        (0 . "LEADER,MULTILEADER") ; ÒıÏß
-        (0 . "*TEXT")             ; ËùÓĞÎÄ×Ö
-        ;; --- Í¼²ã¹ıÂËºËĞÄÇø ---
-        (8 . "Ï¸ÊµÏß,ÖĞĞÄÏß,Ë«µã»®Ïß") ; Ã÷È·µÄÍ¼²ãÃû
-        (8 . "*ÉóºË*,*Éè¼Æ*,*Ğ£¶Ô*,*»®Ïß*") ; Ä£ºıÆ¥Åä°üº¬ÕâĞ©×ÖÑÛµÄÍ¼²ã
-        ;; --- ÏßĞÍ¹ıÂË¶µµ× ---
-        (6 . "CENTER*,PHANTOM*,DASHDOT*") ; Æ¥ÅäÖĞĞÄÏß¡¢Ë«µã»®ÏßµÈÏßĞÍ
+        (0 . "DIMENSION")         ; æ ‡æ³¨
+        (0 . "LEADER,MULTILEADER") ; å¼•çº¿
+        (0 . "*TEXT")             ; æ‰€æœ‰æ–‡å­—
+        ;; --- å›¾å±‚è¿‡æ»¤æ ¸å¿ƒåŒº ---
+        (8 . "ç»†å®çº¿,ä¸­å¿ƒçº¿,åŒç‚¹åˆ’çº¿") ; æ˜ç¡®çš„å›¾å±‚å
+        (8 . "*å®¡æ ¸*,*è®¾è®¡*,*æ ¡å¯¹*,*åˆ’çº¿*") ; æ¨¡ç³ŠåŒ¹é…åŒ…å«è¿™äº›å­—çœ¼çš„å›¾å±‚
+        ;; --- çº¿å‹è¿‡æ»¤å…œåº• ---
+        (6 . "CENTER*,PHANTOM*,DASHDOT*") ; åŒ¹é…ä¸­å¿ƒçº¿ã€åŒç‚¹åˆ’çº¿ç­‰çº¿å‹
       (-4 . "OR>")
     )
   )
 
-  ;; 2. »ñÈ¡Ñ¡Ôñ¼¯
+  ;; 2. è·å–é€‰æ‹©é›†
   (if useSelect
     (progn 
-      (princ "\nÇë¿òÑ¡ÒªÇåÀíµÄÇøÓò: ")
+      (princ "\nè¯·æ¡†é€‰è¦æ¸…ç†çš„åŒºåŸŸ: ")
       (setq ss (ssget filter))
     )
-    (setq ss (ssget "_X" filter)) ; È«¾Ö×Ô¶¯É¨Ãè
+    (setq ss (ssget "_X" filter)) ; å…¨å±€è‡ªåŠ¨æ‰«æ
   )
 
-  ;; 3. Ö´ĞĞÉ¾³ı
+  ;; 3. æ‰§è¡Œåˆ é™¤
   (if ss
     (progn
       (setq cnt (sslength ss))
       (command "_.erase" ss "")
-      (princ (strcat "\nÇåÀí³É¹¦£¡¹²É¾³ı " (itoa cnt) " ¸ö¶ÔÏó¡£"))
+      (princ (strcat "\næ¸…ç†æˆåŠŸï¼å…±åˆ é™¤ " (itoa cnt) " ä¸ªå¯¹è±¡ã€‚"))
     )
-    (princ "\nÎ´·¢ÏÖ·ûºÏÌõ¼şµÄÎï¼ş¡£")
+    (princ "\næœªå‘ç°ç¬¦åˆæ¡ä»¶çš„ç‰©ä»¶ã€‚")
   )
   
   (commeand "_.regen")
   (princ)
 )
 ;; ==========================================================
-;; ¼ÓÔØÌáÊ¾
+;; åŠ è½½æç¤º
 ;; ==========================================================
-(princ "\n--- ESA ÃüÁî¼ÓÔØ³É¹¦£ºÊäÈë ESA Ö´ĞĞÈ«Í¼×Ô¶¯ÅúÁ¿µ¼³ö PDF ---")
-(princ "\n--- BEXK ÃüÁî¼ÓÔØ³É¹¦£º¿òÑ¡ÌáÈ¡Êı¾İ ---")
-(princ "\n--- GTA ÃüÁî - ÌáÈ¡Êı¾İ²¢µ¼³öÎª TXT ---")
-(princ "\n--- EXK ÃüÁî¼ÓÔØ³É¹¦£ºÈ«Í¼É¨Ãè²¢ÉÏ´« ---")
-(princ "\n--- CAÃüÁî¼ÓÔØ³É¹¦£ºÈ«Í¼¸´ÖÆ¼ôÇĞ°åÎÄ¼şÃû ---")
-(princ "\n--- EJSON ÃüÁî¼ÓÔØ³É¹¦£ºÈ«Í¼Éú³É/×·¼Ó JSON Êı¾İµ½×ÀÃæ ---")
-(princ "\n--- SignBatch ÃüÁî¼ÓÔØ³É¹¦£ºÅúÁ¿²åÈëÇ©Ãû ---")
-(princ "\n--- DelOLE ÃüÁî¼ÓÔØ³É¹¦£ºÅúÁ¿É¾³ıÈ«¾ÖoleÇ©Ãû ---")
-(princ "\n--- DeleteAll ÃüÁî¼ÓÔØ³É¹¦£ºÅúÁ¿É¾³ıÈ«¾Ö±ê×¢ÎÄ×Ö ---")
-(princ "\n--- DeleteSelect ÃüÁî¼ÓÔØ³É¹¦£º¿òÑ¡ÅúÁ¿É¾³ıÈ«¾Ö±ê×¢ÎÄ×Ö ---")
-(princ "\n--- extract_data.lsp ÒÑÓÅ»¯¼ÓÔØÍê³É ---")
+(princ "\n--- ESA å‘½ä»¤åŠ è½½æˆåŠŸï¼šè¾“å…¥ ESA æ‰§è¡Œå…¨å›¾è‡ªåŠ¨æ‰¹é‡å¯¼å‡º PDF ---")
+(princ "\n--- BEXK å‘½ä»¤åŠ è½½æˆåŠŸï¼šæ¡†é€‰æå–æ•°æ® ---")
+(princ "\n--- GTA å‘½ä»¤ - æå–æ•°æ®å¹¶å¯¼å‡ºä¸º TXT ---")
+(princ "\n--- EXK å‘½ä»¤åŠ è½½æˆåŠŸï¼šå…¨å›¾æ‰«æå¹¶ä¸Šä¼  ---")
+(princ "\n--- CAå‘½ä»¤åŠ è½½æˆåŠŸï¼šå…¨å›¾å¤åˆ¶å‰ªåˆ‡æ¿æ–‡ä»¶å ---")
+(princ "\n--- EJSON å‘½ä»¤åŠ è½½æˆåŠŸï¼šå…¨å›¾ç”Ÿæˆ/è¿½åŠ  JSON æ•°æ®åˆ°æ¡Œé¢ ---")
+(princ "\n--- SignBatch å‘½ä»¤åŠ è½½æˆåŠŸï¼šæ‰¹é‡æ’å…¥ç­¾å ---")
+(princ "\n--- DelOLE å‘½ä»¤åŠ è½½æˆåŠŸï¼šæ‰¹é‡åˆ é™¤å…¨å±€oleç­¾å ---")
+(princ "\n--- DeleteAll å‘½ä»¤åŠ è½½æˆåŠŸï¼šæ‰¹é‡åˆ é™¤å…¨å±€æ ‡æ³¨æ–‡å­— ---")
+(princ "\n--- DeleteSelect å‘½ä»¤åŠ è½½æˆåŠŸï¼šæ¡†é€‰æ‰¹é‡åˆ é™¤å…¨å±€æ ‡æ³¨æ–‡å­— ---")
+(princ "\n--- extract_data.lsp å·²ä¼˜åŒ–åŠ è½½å®Œæˆ ---")
 
 
