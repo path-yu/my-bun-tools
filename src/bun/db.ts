@@ -307,6 +307,12 @@ export const productSql = {
       ORDER BY prefix
     `).all() as { prefix: string }[];
     return results.map(r => r.prefix).filter(Boolean);
+  },
+
+  deleteAll: (): number => {
+    const db = getDb();
+    const result = db.prepare(`DELETE FROM products`).run();
+    return result.changes || 0;
   }
 };
 

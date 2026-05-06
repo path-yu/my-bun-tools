@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { DataGrid, GridColDef, GridRenderCellParams } from "@mui/x-data-grid";
-import { ThemeProvider, Box, Modal, Typography, Button } from "@mui/material";
+import { ThemeProvider, Box, Modal, Typography } from "@mui/material";
 import { FileText, Folder, FolderOpen, Search, Download, Upload, X, RefreshCw, FolderSearch, Edit, Eye } from "lucide-react";
 import { FileInfo, SyncReasonType } from "@/lib/types";
 import { eventBus, getElectroView } from "@/lib/rpc";
@@ -14,6 +14,8 @@ import { SyncReasonModal } from "./SyncReasonModal";
 import zhCN from "@/lib/locale";
 import { useDataGridTheme } from "../useDataGrid";
 import { useLocalStorageState } from "@/hooks/useLocalStorageState";
+import { IOSButton } from "../IOSButton";
+
 
 interface FileListProps {
   searchQuery: string;
@@ -126,7 +128,8 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
     fileName: string;
     operation: "syncToSource" | "updateFromSource";
   }>({ isOpen: false, fileName: "", operation: "syncToSource" });
-
+  // 点击一键更新所有文件ButtonLoading
+  const [checkAndUpdateFilesLoading, setCheckAndUpdateFilesLoading] = useState(false);
   // 同步 sourcePath 到父组件
   useEffect(() => {
     if (propSourcePath !== undefined && propSourcePath !== sourcePath) {
@@ -190,6 +193,27 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
       handleUpdateFile(data.fileName);
     }
   }
+  // 检查文件中所有需要更新的文件
+  const checkAndUpdateFiles = async () => {
+    try {
+      const result = await getElectroView().rpc!.request.checkAndUpdateFiles({ sourcePath, localPath });
+      if (result.success) {
+        showToast(result.message || "检查更新文件成功", "success");
+      } else {
+        showToast(result.error || "检查更新文件失败", "error");
+      }
+    } catch (err) {
+      console.error("检查更新文件失败:", err);
+      showToast("检查更新文件失败", "error");
+    }
+  }
+  // 点击一键更新所有文件
+  const handleCheckAndUpdateFiles = async () => {
+    // 点击一键更新所有文件ButtonLoading
+    setCheckAndUpdateFilesLoading(true);
+    await checkAndUpdateFiles();
+    setCheckAndUpdateFilesLoading(false);
+  }
   // 启动监听
   const startWatching = async () => {
     try {
@@ -198,6 +222,8 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
         localPath
       });
       eventBus.on('fileChanged', handleFileChange);
+      //如果当前
+      await checkAndUpdateFiles();
       if (result.success) {
         console.log(`成功启动对源目录 ${sourcePath} 的监听`);
         showToast("已启动自动监听，源目录文件变更将自动同步", "success");
@@ -518,13 +544,13 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
   const handleOpenDwg = async (file: FileInfo, isReadOnly: boolean) => {
     const setOpening = isReadOnly ? setOpeningReadOnlyFiles : setOpeningEditFiles;
     const openingSet = isReadOnly ? openingReadOnlyFiles : openingEditFiles;
-    
+
     if (openingSet.has(file.path)) {
       return;
     }
-    
+
     setOpening(prev => new Set(prev).add(file.path));
-    
+
     try {
       const isOpenResult = await getElectroView().rpc!.request.isFileOpen({ filePath: file.path });
       if (isOpenResult.isOpen) {
@@ -731,115 +757,38 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
           <div className="flex items-center gap-2 flex-wrap">
             {isDwgFile && (
               <>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleOpenDwg(p.row, false);
-                  }}
-                  disabled={isOpeningEdit}
-                  className={`inline-flex h-8 items-center justify-center gap-1 px-2 rounded text-xs font-medium transition-colors cursor-pointer ${isOpeningEdit
-                    ? "bg-blue-500/20 text-blue-400 cursor-not-allowed"
-                    : "hover:bg-blue-500/20 text-blue-500"
-                    }`}
-                  title="编辑模式打开"
-                >
-                  {isOpeningEdit ? (
-                    <>
-                      <div className="h-3 w-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                      打开中...
-                    </>
-                  ) : (
-                    <>
-                      <Edit className="h-3 w-3" />
-                      编辑
-                    </>
-                  )}
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleOpenDwg(p.row, true);
-                  }}
-                  disabled={isOpeningReadOnly}
-                  className={`inline-flex h-8 items-center justify-center gap-1 px-2 rounded text-xs font-medium transition-colors cursor-pointer ${isOpeningReadOnly
-                    ? "bg-amber-500/20 text-amber-400 cursor-not-allowed"
-                    : "hover:bg-amber-500/20 text-amber-500"
-                    }`}
-                  title="只读模式打开"
-                >
-                  {isOpeningReadOnly ? (
-                    <>
-                      <div className="h-3 w-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
-                      打开中...
-                    </>
-                  ) : (
-                    <>
-                      <Eye className="h-3 w-3" />
-                      只读
-                    </>
-                  )}
-                </button>
+                <IOSButton size="sm" variant="primary" loading={isOpeningEdit} disabled={isOpeningEdit} onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenDwg(p.row, false);
+                }} title="编辑模式打开">
+                  {isOpeningEdit ? "打开中..." : <><Edit className="h-3 w-3" /> 编辑</>}
+                </IOSButton>
+                <IOSButton size="sm" variant="secondary" loading={isOpeningReadOnly} disabled={isOpeningReadOnly} onClick={(e) => {
+                  e.stopPropagation();
+                  handleOpenDwg(p.row, true);
+                }} title="只读模式打开">
+                  {isOpeningReadOnly ? "打开中..." : <><Eye className="h-3 w-3" /> 只读</>}
+                </IOSButton>
               </>
             )}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleOpenInExplorer(p.row);
-              }}
-              className={`inline-flex h-8 items-center justify-center gap-1 px-2 rounded text-xs font-medium transition-colors cursor-pointer text-slate-400 hover:text-slate-600 hover:bg-slate-500/10`}
-              title="在资源管理器中显示"
-            >
+            <IOSButton size="sm" variant="secondary" onClick={(e) => {
+              e.stopPropagation();
+              handleOpenInExplorer(p.row);
+            }} title="在资源管理器中显示">
               <FolderSearch className="h-3 w-3" />
-              打开
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleUpdateFile(p.row.name);
-              }}
-              disabled={isUpdating || isSyncing}
-              className={`inline-flex h-8 items-center justify-center gap-1 px-2 rounded text-xs font-medium transition-colors cursor-pointer ${isUpdating
-                ? "bg-blue-100 text-blue-400 cursor-not-allowed"
-                : "hover:bg-blue-500/20 text-blue-500"
-                }`}
-              title="更新（从源目录获取）"
-            >
-              {isUpdating ? (
-                <>
-                  <div className="h-3 w-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-                  更新中...
-                </>
-              ) : (
-                <>
-                  <Download className="h-3 w-3" />
-                  更新
-                </>
-              )}
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleSyncFile(p.row.name);
-              }}
-              disabled={isUpdating || isSyncing}
-              className={`inline-flex h-8 items-center justify-center gap-1 px-2 rounded text-xs font-medium transition-colors cursor-pointer ${isSyncing
-                ? "bg-green-100 text-green-400 cursor-not-allowed"
-                : "hover:bg-green-500/20 text-green-500"
-                }`}
-              title="同步（上传到源目录）"
-            >
-              {isSyncing ? (
-                <>
-                  <div className="h-3 w-3 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
-                  上传中...
-                </>
-              ) : (
-                <>
-                  <Upload className="h-3 w-3" />
-                  同步
-                </>
-              )}
-            </button>
+            </IOSButton>
+            <IOSButton size="sm" variant="primary" loading={isUpdating} disabled={isUpdating || isSyncing} onClick={(e) => {
+              e.stopPropagation();
+              handleUpdateFile(p.row.name);
+            }} title="更新（从源目录获取）">
+              {isUpdating ? "更新中..." : <><Download className="h-3 w-3" /> 更新</>}
+            </IOSButton>
+            <IOSButton size="sm" variant="success" loading={isSyncing} disabled={isUpdating || isSyncing} onClick={(e) => {
+              e.stopPropagation();
+              handleSyncFile(p.row.name);
+            }} title="同步（上传到源目录）">
+              {isSyncing ? "上传中..." : <><Upload className="h-3 w-3" /> 同步</>}
+            </IOSButton>
           </div>
         );
       },
@@ -864,18 +813,12 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
         <Folder className="h-12 w-12 text-slate-600 mb-4 opacity-20" />
         <p className="text-sm text-slate-500 mb-4">请先设置本地目录和源目录</p>
         <div className="flex gap-2">
-          <button
-            onClick={handleSelectSource}
-            className="px-4 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors"
-          >
+          <IOSButton variant="primary" onClick={handleSelectSource}>
             选择源目录
-          </button>
-          <button
-            onClick={handleSelectLocal}
-            className="px-4 py-2 rounded-lg bg-green-500 text-white hover:bg-green-600 transition-colors"
-          >
+          </IOSButton>
+          <IOSButton variant="success" onClick={handleSelectLocal}>
             选择本地目录
-          </button>
+          </IOSButton>
         </div>
       </div>
     );
@@ -901,15 +844,9 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
                 title={sourcePath}
               >
                 {sourcePath || "未设置"}
-                <button
-                  onClick={handleSelectSource}
-                  className={`px-2  ml-4 py-1 rounded text-xs font-medium transition-colors ${isDark
-                    ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                    : "bg-slate-200 text-slate-600 hover:bg-slate-300"
-                    }`}
-                >
+                <IOSButton size="sm" variant="secondary" onClick={handleSelectSource} className="ml-4">
                   选择
-                </button>
+                </IOSButton>
               </span>
               <div className="relative flex-shrink-0">
                 <div className="flex gap-2">
@@ -942,13 +879,9 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
                   />
                 </div>
                 {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery("")}
-                    className={`absolute right-2 top-1/2 -translate-y-1/2 ${isDark ? "text-slate-500" : "text-slate-400"
-                      }`}
-                  >
+                  <IOSButton size="sm" variant="secondary" onClick={() => setSearchQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 !p-1">
                     <X className="h-3 w-3" />
-                  </button>
+                  </IOSButton>
                 )}
               </div>
 
@@ -965,27 +898,18 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
                 title={localPath}
               >
                 {localPath}
-                <button
-                  onClick={handleSelectLocal}
-                  className={`px-2 py-1 ml-4 rounded text-xs font-medium transition-colors ${isDark
-                    ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                    : "bg-slate-200 text-slate-600 hover:bg-slate-300"
-                    }`}
-                >
+                <IOSButton size="sm" variant="secondary" onClick={handleSelectLocal}>
                   选择
-                </button>
+                </IOSButton>
               </span>
 
-              <button
-                onClick={() => setIsCloneModalOpen(true)}
-                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${isDark
-                  ? "bg-purple-600 text-white hover:bg-purple-700"
-                  : "bg-purple-600 text-white hover:bg-purple-700"
-                  }`}
-                disabled={!sourcePath}
-              >
+              <IOSButton size="sm" variant="secondary" disabled={!sourcePath} onClick={() => setIsCloneModalOpen(true)}>
                 克隆源目录
-              </button>
+              </IOSButton>
+              {/* 点击一键更新所有文件 */}
+              <IOSButton size="sm" disabled={!sourcePath || !localPath || checkAndUpdateFilesLoading} loading={checkAndUpdateFilesLoading} onClick={handleCheckAndUpdateFiles}>
+                一键更新
+              </IOSButton>
               <label
                 className={`flex items-center gap-2 px-2 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${autoSyncEnabled
                   ? isDark
@@ -1055,16 +979,9 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
               )}
             </div>
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => loadDirectory(localPath, true)}
-                disabled={isRefreshing}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${isDark
-                  ? "bg-blue-500/10 text-blue-400 hover:bg-blue-500/20"
-                  : "bg-blue-50 text-blue-600 hover:bg-blue-100"
-                  }`}
-              >
+              <IOSButton size="sm" variant="secondary" onClick={() => loadDirectory(localPath, true)} disabled={isRefreshing}>
                 <RefreshCw className={`h-3 w-3 ${isRefreshing ? "animate-spin" : ""}`} />
-              </button>
+              </IOSButton>
             </div>
           </div>
         </div>
@@ -1080,7 +997,7 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
           <ThemeProvider theme={theme}>
             <Box
               sx={{
-                height: "calc(100vh - 320px)",
+                height: "calc(100vh - 300px)",
                 width: "100%",
                 bgcolor: "background.paper",
                 borderRadius: "16px",
@@ -1159,12 +1076,9 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
               <Typography variant="h6" component="h3" sx={{ fontWeight: 600, color: isDark ? '#e2e8f0' : '#1e293b' }}>
                 克隆源目录到本地
               </Typography>
-              <Button
-                onClick={() => setIsCloneModalOpen(false)}
-                sx={{ minWidth: 'auto', p: 0.5, borderRadius: 1, color: isDark ? '#94a3b8' : '#64748b' }}
-              >
+              <IOSButton size="sm" variant="secondary" onClick={() => setIsCloneModalOpen(false)} className="!p-1">
                 <X className="h-5 w-5" />
-              </Button>
+              </IOSButton>
             </Box>
 
             <Box sx={{ p: 2 }}>
@@ -1229,32 +1143,12 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
               p: 2,
               borderTop: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
             }}>
-              <Button
-                variant="outlined"
-                onClick={() => setIsCloneModalOpen(false)}
-                sx={{
-                  color: isDark ? '#e2e8f0' : '#1e293b',
-                  borderColor: isDark ? '#334155' : '#e2e8f0',
-                  '&:hover': {
-                    bgcolor: isDark ? '#334155' : '#f1f5f9',
-                    borderColor: isDark ? '#475569' : '#cbd5e1',
-                  },
-                }}
-              >
+              <IOSButton variant="outline" onClick={() => setIsCloneModalOpen(false)}>
                 取消
-              </Button>
-              <Button
-                variant="contained"
-                onClick={handleCloneWithFilter}
-                disabled={loading || cloneSelectedTypes.length === 0}
-                sx={{
-                  bgcolor: '#9333ea',
-                  '&:hover': { bgcolor: '#7c3aed' },
-                  '&:disabled': { bgcolor: '#64748b', cursor: 'not-allowed' },
-                }}
-              >
+              </IOSButton>
+              <IOSButton variant="primary" onClick={handleCloneWithFilter} disabled={loading || cloneSelectedTypes.length === 0}>
                 {loading ? "克隆中..." : "开始克隆"}
-              </Button>
+              </IOSButton>
             </Box>
           </Box>
         </Fade>

@@ -51,7 +51,7 @@ export function Header({ onOpenSettings }: HeaderProps) {
           {/* 快捷切换模式按钮 (主导航栏显式展示) */}
           <button
             onClick={toggleTheme}
-            className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all active:scale-90 ${
+            className={`flex h-8 w-8 items-center justify-center rounded-lg ios-transition active:scale-90 ${
               isDark 
                 ? 'bg-slate-800 text-amber-400 hover:bg-slate-700' 
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -64,7 +64,7 @@ export function Header({ onOpenSettings }: HeaderProps) {
           <div className="relative" ref={settingsRef}>
             <button
               onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-              className={`flex h-8 w-8 items-center justify-center rounded-lg transition-all active:scale-90 ${
+              className={`flex h-8 w-8 items-center justify-center rounded-lg ios-transition active:scale-90 ${
                 isDark 
                   ? 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-100' 
                   : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800'

@@ -151,7 +151,7 @@ export function SettingsModal({
     >
       <div
         ref={modalRef}
-        className={`w-full max-w-lg overflow-hidden rounded-2xl shadow-2xl transition-all border animate-in zoom-in-95 duration-200 ${isDark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"
+        className={`w-full max-w-lg overflow-hidden rounded-2xl shadow-2xl ios-transition border animate-in zoom-in-95 duration-200 ${isDark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"
           }`}
         onClick={(e) => e.stopPropagation()} // 阻止冒泡，防止点击内容区关闭
       >
@@ -216,7 +216,7 @@ export function SettingsModal({
                   <button
                     type="button"
                     onClick={() => setIsTypeDropdownOpen(!isTypeDropdownOpen)}
-                    className={`flex h-10 w-full items-center justify-between rounded-xl border px-4 text-sm transition-all ${isDark
+                    className={`flex h-10 w-full items-center justify-between rounded-xl border px-4 text-sm ios-transition ${isDark
                         ? "bg-slate-800/50 border-slate-700 text-slate-200"
                         : "bg-slate-50/50 border-slate-200 text-slate-800"
                       }`}
@@ -267,7 +267,7 @@ export function SettingsModal({
                   type="text"
                   value={cadPath}
                   onChange={(e) => setCadPath(e.target.value)}
-                  className={`h-10 w-full rounded-xl border px-4 text-sm transition-all focus:ring-2 focus:ring-blue-500/20 ${isDark
+                  className={`h-10 w-full rounded-xl border px-4 text-sm ios-transition focus:ring-2 focus:ring-blue-500/20 ${isDark
                       ? "bg-slate-800/50 border-slate-700 text-slate-200 placeholder:text-slate-600"
                       : "bg-slate-50/50 border-slate-200 text-slate-800 placeholder:text-slate-400"
                     }`}
@@ -310,14 +310,14 @@ export function SettingsModal({
                     value={currentDbPath}
                     readOnly
                     placeholder="尚未选择数据库文件..."
-                    className={`h-10 flex-1 rounded-xl border px-4 text-sm transition-all ${isDark
+                    className={`h-10 flex-1 rounded-xl border px-4 text-sm ios-transition ${isDark
                         ? "bg-slate-800/50 border-slate-700 text-slate-300"
                         : "bg-slate-50/50 border-slate-200 text-slate-600"
                       }`}
                   />
                   <button
                     onClick={handleSelectDbFile}
-                    className={`flex h-10 w-10 items-center justify-center rounded-xl border transition-all active:scale-95 ${isDark
+                    className={`flex h-10 w-10 items-center justify-center rounded-xl border ios-transition active:scale-95 ${isDark
                         ? "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
                         : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
                       }`}
@@ -347,7 +347,7 @@ export function SettingsModal({
           <button
             onClick={handleSave}
             disabled={saved || !isDirty}
-            className={`flex items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium shadow-lg transition-all active:scale-[0.98] disabled:opacity-50 ${saved
+            className={`flex items-center gap-2 rounded-xl px-6 py-2.5 text-sm font-medium shadow-lg ios-transition active:scale-[0.98] disabled:opacity-50 ${saved
                 ? "bg-emerald-500 text-white"
                 : "bg-blue-600 text-white hover:bg-blue-500 hover:shadow-blue-500/20"
               }`}

@@ -261,6 +261,21 @@ export type DrawingRPC = {
         params: Product;
         response: { success: boolean; error?: string };
       };
+      clearAllProducts: {
+        params: {};
+        response: { success: boolean; count?: number; error?: string };
+      };
+     checkAndUpdateFiles: {
+        params: { sourcePath: string; localPath: string };
+        response: {
+          success: boolean;
+          error?: string;
+          copiedFiles: string[];
+          updatedFiles: string[];
+          skippedFiles: string[];
+          message?: string;
+        };
+      };
     };
   }>;
   webview: RPCSchema<{
@@ -566,6 +581,57 @@ async function syncDirectoryRecursive(
       await smartCopyFile(srcPath, destPath);
     }
   }
+}
+
+async function checkAndUpdateFilesRecursive(
+  sourcePath: string,
+  localPath: string,
+): Promise<{ copiedFiles: string[]; updatedFiles: string[]; skippedFiles: string[] }> {
+  await fs.mkdir(localPath, { recursive: true });
+  
+  const sourceEntries = await fs.readdir(sourcePath, { withFileTypes: true });
+  const localEntries = await fs.readdir(localPath, { withFileTypes: true });
+  
+  const localFileMap = new Map<string, { isDir: boolean; mtimeMs: number }>();
+  for (const entry of localEntries) {
+    const fullPath = path.join(localPath, entry.name);
+    const stat = await fs.stat(fullPath);
+    localFileMap.set(entry.name, {
+      isDir: entry.isDirectory(),
+      mtimeMs: stat.mtimeMs,
+    });
+  }
+  
+  const copiedFiles: string[] = [];
+  const updatedFiles: string[] = [];
+  const skippedFiles: string[] = [];
+  
+  for (const entry of sourceEntries) {
+    const srcFullPath = path.join(sourcePath, entry.name);
+    const destFullPath = path.join(localPath, entry.name);
+    
+    if (entry.isDirectory()) {
+      const result = await checkAndUpdateFilesRecursive(srcFullPath, destFullPath);
+      copiedFiles.push(...result.copiedFiles.map(f => path.join(entry.name, f)));
+      updatedFiles.push(...result.updatedFiles.map(f => path.join(entry.name, f)));
+      skippedFiles.push(...result.skippedFiles.map(f => path.join(entry.name, f)));
+    } else {
+      const localInfo = localFileMap.get(entry.name);
+      const srcStat = await fs.stat(srcFullPath);
+      
+      if (!localInfo) {
+        await smartCopyFile(srcFullPath, destFullPath);
+        copiedFiles.push(entry.name);
+      } else if (!localInfo.isDir && srcStat.mtimeMs > localInfo.mtimeMs) {
+        await smartCopyFile(srcFullPath, destFullPath);
+        updatedFiles.push(entry.name);
+      } else {
+        skippedFiles.push(entry.name);
+      }
+    }
+  }
+  
+  return { copiedFiles, updatedFiles, skippedFiles };
 }
 export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
   maxRequestTime: 6000,
@@ -1312,6 +1378,79 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
         } catch (error) {
           console.error("更新产品失败:", error);
           return { success: false, error: error instanceof Error ? error.message : "更新产品失败" };
+        }
+      },
+      clearAllProducts: async () => {
+        try {
+          const count = productSql.deleteAll();
+          return { success: true, count };
+        } catch (error) {
+          console.error("清空产品数据失败:", error);
+          return { success: false, error: error instanceof Error ? error.message : "清空产品数据失败" };
+        }
+      },
+      checkAndUpdateFiles: async ({ sourcePath, localPath }) => {
+        try {
+          await fs.mkdir(localPath, { recursive: true });
+          
+          const sourceEntries = await fs.readdir(sourcePath, { withFileTypes: true });
+          const localEntries = await fs.readdir(localPath, { withFileTypes: true });
+          
+          const localFileMap = new Map<string, { isDir: boolean; mtimeMs: number }>();
+          for (const entry of localEntries) {
+            const fullPath = path.join(localPath, entry.name);
+            const stat = await fs.stat(fullPath);
+            localFileMap.set(entry.name, {
+              isDir: entry.isDirectory(),
+              mtimeMs: stat.mtimeMs,
+            });
+          }
+          
+          const copiedFiles: string[] = [];
+          const updatedFiles: string[] = [];
+          const skippedFiles: string[] = [];
+          
+          for (const entry of sourceEntries) {
+            const srcFullPath = path.join(sourcePath, entry.name);
+            const destFullPath = path.join(localPath, entry.name);
+            
+            if (entry.isDirectory()) {
+              const result = await checkAndUpdateFilesRecursive(srcFullPath, destFullPath);
+              copiedFiles.push(...result.copiedFiles.map(f => path.join(entry.name, f)));
+              updatedFiles.push(...result.updatedFiles.map(f => path.join(entry.name, f)));
+              skippedFiles.push(...result.skippedFiles.map(f => path.join(entry.name, f)));
+            } else {
+              const localInfo = localFileMap.get(entry.name);
+              const srcStat = await fs.stat(srcFullPath);
+              
+              if (!localInfo) {
+                await smartCopyFile(srcFullPath, destFullPath);
+                copiedFiles.push(entry.name);
+              } else if (!localInfo.isDir && srcStat.mtimeMs > localInfo.mtimeMs) {
+                await smartCopyFile(srcFullPath, destFullPath);
+                updatedFiles.push(entry.name);
+              } else {
+                skippedFiles.push(entry.name);
+              }
+            }
+          }
+          
+          return {
+            success: true,
+            copiedFiles,
+            updatedFiles,
+            skippedFiles,
+            message: `同步完成：新增 ${copiedFiles.length} 个文件，更新 ${updatedFiles.length} 个文件，跳过 ${skippedFiles.length} 个文件`,
+          };
+        } catch (error) {
+          console.error("检查并更新文件失败:", error);
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : "检查并更新文件失败",
+            copiedFiles: [],
+            updatedFiles: [],
+            skippedFiles: [],
+          };
         }
       },
     },

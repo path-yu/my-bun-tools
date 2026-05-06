@@ -19,7 +19,6 @@ const DEFAULT_CAD_CONFIG: CADConfig = {
 type ViewMode = TabKey;
 
 export default function DrawingManagerPage() {
-  const { isDark } = useAppTheme();
   const [drawings, setDrawings] = useState<Drawing[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingDrawing, setEditingDrawing] = useState<Drawing | null>(null);

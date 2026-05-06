@@ -18,6 +18,7 @@ import {
 import { getElectroView } from "@/lib/rpc";
 import { useConfirm } from "../useConfirm";
 import { useToast } from "../useToast";
+import { IOSButton } from "../IOSButton";
 import { SelectDropdown } from "../SelectDropdown";
 import { IOSInput } from "../IOSInput";
 
@@ -37,16 +38,13 @@ function CopyButton({ text }: { text: string }) {
   };
 
   return (
-    <button
-      onClick={handleCopy}
-      className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded hover:bg-slate-500/20 transition-colors"
-    >
+    <IOSButton size="sm" variant="secondary" onClick={handleCopy} className="ml-1 !p-1">
       {copied ? (
         <Check className="h-3 w-3 text-emerald-500" />
       ) : (
         <Copy className="h-3 w-3 text-slate-400" />
       )}
-    </button>
+    </IOSButton>
   );
 }
 
@@ -370,44 +368,12 @@ export function DrawingTable({
         
         return (
           <div className="flex gap-2 items-center">
-            <button
-              onClick={() => handleOpenInCAD(p.row, openMode === "readonly")}
-              disabled={isOpenLoading}
-              className={`flex items-center h-5 gap-1 rounded-md px-2 py-1 text-[11px] cursor-pointer font-medium transition-all ${isOpenLoading
-                ? "bg-blue-500/20 text-blue-300 cursor-not-allowed"
-                : "text-blue-400 hover:bg-blue-500/10 active:scale-95"
-                }`}
-            >
-              {isOpenLoading ? (
-                <>
-                  <div className="h-3 w-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-                  打开中...
-                </>
-              ) : (
-                <>
-                  <FolderOpen className="h-3 w-3" /> 打开定位
-                </>
-              )}
-            </button>
-            <button
-              onClick={() => handleQuickLocate(p.row, openMode === "readonly")}
-              disabled={isLocateLoading}
-              className={`flex items-center h-5 gap-1 rounded-md px-2 py-1 text-[11px] cursor-pointer font-medium transition-all ${isLocateLoading
-                ? "bg-amber-500/20 text-amber-300 cursor-not-allowed"
-                : "text-amber-400 hover:bg-amber-500/10 active:scale-95"
-                }`}
-            >
-              {isLocateLoading ? (
-                <>
-                  <div className="h-3 w-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-                  定位中...
-                </>
-              ) : (
-                <>
-                  <Zap className="h-3 w-3" /> 定位
-                </>
-              )}
-            </button>
+            <IOSButton size="sm" variant="primary" loading={isOpenLoading} disabled={isOpenLoading} onClick={() => handleOpenInCAD(p.row, openMode === "readonly")}>
+              {isOpenLoading ? "打开中..." : <><FolderOpen className="h-3 w-3" /> 打开定位</>}
+            </IOSButton>
+            <IOSButton size="sm" variant="secondary" loading={isLocateLoading} disabled={isLocateLoading} onClick={() => handleQuickLocate(p.row, openMode === "readonly")}>
+              {isLocateLoading ? "定位中..." : <><Zap className="h-3 w-3" /> 定位</>}
+            </IOSButton>
           </div>
         );
       },
@@ -440,31 +406,17 @@ export function DrawingTable({
 
         return (
           <div className="flex items-center justify-end gap-1 h-full">
-            <button
-              onClick={() => {
+            <IOSButton size="sm" variant="secondary" onClick={() => {
                 navigator.clipboard.writeText(coordinateCmd);
-              }}
-              className="group p-1.5 text-slate-400 hover:text-amber-500 hover:bg-amber-500/10 rounded-lg transition-all active:scale-90"
-              title={`点击复制: ${coordinateCmd}`}
-            >
-              <div className="flex items-center gap-1">
-                <Zap className="h-4 w-4" />
-              </div>
-            </button>
-            <button
-              onClick={() => onEdit(p.row)}
-              className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-500/10 rounded-lg transition-all"
-              title="编辑"
-            >
+              }} title={`点击复制: ${coordinateCmd}`}>
+              <Zap className="h-4 w-4" />
+            </IOSButton>
+            <IOSButton size="sm" variant="secondary" onClick={() => onEdit(p.row)} title="编辑">
               <Pencil className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => handleDeleteRow(p.row)}
-              className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all"
-              title="删除"
-            >
+            </IOSButton>
+            <IOSButton size="sm" variant="danger" onClick={() => handleDeleteRow(p.row)} title="删除">
               <Trash2 className="h-4 w-4" />
-            </button>
+            </IOSButton>
           </div>
         );
       },
@@ -528,16 +480,9 @@ export function DrawingTable({
                 placeholder="物料编码..."
                 className="w-40"
               />
-              <button
-                onClick={handleRefresh}
-                disabled={isRefreshing}
-                className={`p-2 rounded-lg transition-all px-2 ${isDark
-                  ? "bg-slate-700/80 text-slate-300 hover:bg-slate-600"
-                  : "bg-white/80 text-slate-600 hover:bg-slate-100"
-                  }`}
-              >
+              <IOSButton size="sm" variant="secondary" onClick={handleRefresh} disabled={isRefreshing}>
                 <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-              </button>
+              </IOSButton>
             </div>
             <div className="ml-2">
               <SelectDropdown

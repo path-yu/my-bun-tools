@@ -2,7 +2,8 @@ import { SyncReasonType } from "@/lib/types";
 import { useAppTheme } from "@/components/ThemeContext";
 import { useState } from "react";
 import { X } from "lucide-react";
-import { Fade,Modal,Collapse,Box,Typography,TextField,Button, } from "@mui/material";
+import { Fade,Modal,Collapse,Box,Typography,TextField, } from "@mui/material";
+import { IOSButton } from "@/components/IOSButton";
 export interface SyncReasonModalProps {
   isOpen: boolean;
   fileName: string;
@@ -60,12 +61,9 @@ export function SyncReasonModal({ isOpen, fileName, onClose, onConfirm }: SyncRe
             <Typography variant="h6" component="h3" sx={{ fontWeight: 600, color: isDark ? '#e2e8f0' : '#1e293b' }}>
               同步原因
             </Typography>
-            <Button
-              onClick={onClose}
-              sx={{ minWidth: 'auto', p: 0.5, borderRadius: 1, color: isDark ? '#94a3b8' : '#64748b' }}
-            >
+            <IOSButton size="sm" variant="secondary" onClick={onClose} className="!p-1">
               <X className="h-5 w-5" />
-            </Button>
+            </IOSButton>
           </Box>
           <Box sx={{ p: 2 }}>
             <Typography variant="body2" sx={{ mb: 2, color: isDark ? '#94a3b8' : '#64748b' }}>
@@ -156,32 +154,12 @@ export function SyncReasonModal({ isOpen, fileName, onClose, onConfirm }: SyncRe
             p: 2,
             borderTop: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
           }}>
-            <Button
-              variant="outlined"
-              onClick={onClose}
-              sx={{
-                color: isDark ? '#e2e8f0' : '#1e293b',
-                borderColor: isDark ? '#334155' : '#e2e8f0',
-                '&:hover': {
-                  bgcolor: isDark ? '#334155' : '#f1f5f9',
-                  borderColor: isDark ? '#475569' : '#cbd5e1',
-                },
-              }}
-            >
+            <IOSButton variant="outline" onClick={onClose}>
               取消
-            </Button>
-            <Button
-              variant="contained"
-              onClick={handleConfirm}
-              disabled={selectedReasonType === "custom" && !customReason.trim()}
-              sx={{
-                bgcolor: '#3b82f6',
-                '&:hover': { bgcolor: '#2563eb' },
-                '&:disabled': { bgcolor: '#64748b', cursor: 'not-allowed' },
-              }}
-            >
+            </IOSButton>
+            <IOSButton variant="primary" onClick={handleConfirm} disabled={selectedReasonType === "custom" && !customReason.trim()}>
               确认同步
-            </Button>
+            </IOSButton>
           </Box>
         </Box>
       </Fade>

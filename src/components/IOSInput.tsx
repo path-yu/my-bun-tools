@@ -32,7 +32,7 @@ export function IOSInput({
 
   return (
     <div
-      className={`relative flex items-center rounded-xl border transition-all duration-200 ${isDark
+      className={`relative flex items-center rounded-xl border ios-transition duration-200 ${isDark
         ? "bg-slate-800 border-slate-700"
         : "bg-white border-slate-200"
         } ${isFocused ? "ring-2 ring-blue-500/30 border-blue-500" : ""} ${className}`}
@@ -56,7 +56,7 @@ export function IOSInput({
       {clearable && value && (
         <button
           onClick={handleClear}
-          className={`absolute right-2 p-1 rounded-full transition-all ${isDark
+          className={`absolute right-2 p-1 rounded-full ios-transition ${isDark
             ? "bg-slate-600 text-slate-300 hover:bg-slate-500"
             : "bg-slate-200 text-slate-500 hover:bg-slate-300"
           }`}

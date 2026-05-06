@@ -52,7 +52,7 @@ export function SelectDropdown({ value, onChange, options, placeholder, directio
     <div className="relative" ref={containerRef}>
       <button
         onClick={handleButtonClick}
-        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${isDark
+        className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ios-transition ${isDark
           ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
           : "bg-slate-200 text-slate-600 hover:bg-slate-300"
           }`}

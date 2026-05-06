@@ -108,7 +108,7 @@ export function DrawingForm({ isOpen, drawing, onClose, onSubmit, }: DrawingForm
                       onChange={(e) => setFormData({ ...formData, materialCode: e.target.value })}
                       placeholder="例如: M20260407"
                       required
-                      className="h-11 w-full rounded-xl border border-border bg-secondary/50 px-4 text-sm focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all"
+                      className="h-11 w-full rounded-xl border border-border bg-secondary/50 px-4 text-sm focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none ios-transition"
                     />
                   </div>
                   <div className="space-y-2">
@@ -119,7 +119,7 @@ export function DrawingForm({ isOpen, drawing, onClose, onSubmit, }: DrawingForm
                       onChange={(e) => setFormData({ ...formData, drawingNumber: e.target.value })}
                       placeholder="例如: DWG-SH-001"
                       required
-                      className="h-11 w-full rounded-xl border border-border bg-secondary/50 px-4 text-sm focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all"
+                      className="h-11 w-full rounded-xl border border-border bg-secondary/50 px-4 text-sm focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none ios-transition"
                     />
                   </div>
                 </div>
@@ -133,7 +133,7 @@ export function DrawingForm({ isOpen, drawing, onClose, onSubmit, }: DrawingForm
                       value={formData.filePath}
                       onChange={(e) => setFormData({ ...formData, filePath: e.target.value })}
                       placeholder="\\服务器\工程部\图纸.dwg"
-                      className="h-11 w-full rounded-xl border border-border bg-secondary/50 px-4 text-sm focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all"
+                      className="h-11 w-full rounded-xl border border-border bg-secondary/50 px-4 text-sm focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none ios-transition"
                     />
                     <div className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                       <Upload className="h-4 w-4" />
@@ -148,7 +148,7 @@ export function DrawingForm({ isOpen, drawing, onClose, onSubmit, }: DrawingForm
                     value={formData.remarks}
                     onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
                     placeholder="在此输入技术要求、变更记录或客户要求..."
-                    className="min-h-25 w-full rounded-xl border border-border bg-secondary/50 p-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all resize-none"
+                    className="min-h-25 w-full rounded-xl border border-border bg-secondary/50 p-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none ios-transition resize-none"
                   />
                 </div>
               </div>
@@ -164,7 +164,7 @@ export function DrawingForm({ isOpen, drawing, onClose, onSubmit, }: DrawingForm
                 </button>
                 <button 
                   type="submit" 
-                  className="flex-1 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 hover:opacity-90 active:scale-[0.98] transition-all"
+                  className="flex-1 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 hover:opacity-90 active:scale-[0.98] ios-transition"
                 >
                   {drawing ? '确认更新' : '提交入库'}
                 </button>

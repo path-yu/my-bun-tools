@@ -220,6 +220,21 @@ export type DrawingRPC = {
         params: Product;
         response: { success: boolean; error?: string };
       };  
+      clearAllProducts: {
+        params: {};
+        response: { success: boolean; count?: number; error?: string };
+      };
+       checkAndUpdateFiles: {
+        params: { sourcePath: string; localPath: string };
+        response: {
+          success: boolean;
+          error?: string;
+          copiedFiles: string[];
+          updatedFiles: string[];
+          skippedFiles: string[];
+          message?: string;
+        };
+      };
     };
     messages: {
       fileChanged: {

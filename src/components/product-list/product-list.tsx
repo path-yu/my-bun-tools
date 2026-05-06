@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
 import { DataGrid, GridColDef, GridRenderCellParams } from "@mui/x-data-grid";
-import { ThemeProvider, Box, Button, Modal, Fade, Typography, TextField, FormControl, InputLabel, Select, MenuItem } from "@mui/material";
+import { ThemeProvider, Box, Modal, Fade, Typography, TextField, FormControl, InputLabel, Select, MenuItem } from "@mui/material";
 import { Plus, Upload, Trash2, Package, Edit, Copy } from "lucide-react";
 import { getElectroView } from "@/lib/rpc";
 import { useAppTheme } from "../ThemeContext";
@@ -8,6 +8,7 @@ import { useToast } from "../useToast";
 import { useDataGridTheme } from "../useDataGrid";
 import { IOSInput } from "../IOSInput";
 import { SelectDropdown } from "../SelectDropdown";
+import { IOSButton } from "../IOSButton";
 import zhCN from "@/lib/locale";
 
 export interface Product {
@@ -37,6 +38,7 @@ export function ProductList() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isClearModalOpen, setIsClearModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [newProduct, setNewProduct] = useState<Product>({
     unit: "",
@@ -210,6 +212,22 @@ export function ProductList() {
     }
   };
 
+  const handleClearAllProducts = async () => {
+    try {
+      const result = await getElectroView().rpc!.request.clearAllProducts({});
+      if (result.success) {
+        showToast(`成功清空 ${result.count} 条产品数据`, "success");
+        setIsClearModalOpen(false);
+        loadProducts();
+      } else {
+        showToast(result.error || "清空失败", "error");
+      }
+    } catch (error) {
+      console.error("清空产品数据失败:", error);
+      showToast("清空产品数据失败", "error");
+    }
+  };
+
   const handleFilterByPrefix = (prefix: string) => {
     setCodePrefixFilter(prefix === codePrefixFilter ? "" : prefix);
     setProductNameFilter("");
@@ -262,8 +280,12 @@ export function ProductList() {
     {
       field: "productSpec",
       headerName: "产品规格",
-      width: 150,
-      editable: false,
+      width: 300,
+      flex: 1,
+      editable: true,
+      renderCell: (p: GridRenderCellParams) => (
+        <div className="text-sm truncate cursor-pointer" title={p.value}>{p.value}</div>
+      ),
     },
     {
       field: "productAttribute",
@@ -293,22 +315,12 @@ export function ProductList() {
       sortable: false,
       renderCell: (p: GridRenderCellParams) => (
         <div className="flex items-center gap-1">
-          <button
-            onClick={() => handleEditProduct(p.row)}
-            className={`inline-flex h-8 items-center justify-center gap-1 px-2 rounded text-xs font-medium transition-colors cursor-pointer hover:bg-blue-500/20 text-blue-500`}
-            title="编辑产品"
-          >
+          <IOSButton size="sm" variant="primary" onClick={() => handleEditProduct(p.row)} title="编辑产品">
             <Edit className="h-3 w-3" />
-            编辑
-          </button>
-          <button
-            onClick={() => handleDeleteProduct(p.row.id as number)}
-            className={`inline-flex h-8 items-center justify-center gap-1 px-2 rounded text-xs font-medium transition-colors cursor-pointer hover:bg-red-500/20 text-red-500`}
-            title="删除产品"
-          >
+          </IOSButton>
+          <IOSButton size="sm" variant="danger" onClick={() => handleDeleteProduct(p.row.id as number)} title="删除产品">
             <Trash2 className="h-3 w-3" />
-            删除
-          </button>
+          </IOSButton>
         </div>
       ),
     },
@@ -326,7 +338,23 @@ export function ProductList() {
     return prefixes.filter(prefix => prefix.startsWith("03"));
   }, [prefixes, attributeFilter]);
 
-
+  // 1. 在组件外部或内部定义一个通用样式
+const inputStyle = (isDark: boolean) => ({
+  "& .MuiInputLabel-root": { 
+    color: isDark ? "#94a3b8" : "#64748b" 
+  },
+  "& .MuiOutlinedInput-root": {
+    "& fieldset": { 
+      borderColor: isDark ? "#475569" : "#e2e8f0" 
+    },
+    "&:hover fieldset": {
+      borderColor: isDark ? "#64748b" : "#cbd5e1",
+    },
+  },
+  "& .MuiOutlinedInput-input": {
+    color: isDark ? "#e2e8f0" : "#1e293b", // <-- 关键修复：输入文字颜色
+  },
+});
   return (
     <div
       className={`rounded-2xl border overflow-hidden ${
@@ -345,32 +373,7 @@ export function ProductList() {
             <span className="text-xs text-slate-500">({products.length}条)</span>
           </div>
           <div className="flex items-center gap-2 ml-auto">
-            <button
-              onClick={() => setIsImportModalOpen(true)}
-              className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                isDark
-                  ? "bg-purple-600 text-white hover:bg-purple-700"
-                  : "bg-purple-600 text-white hover:bg-purple-700"
-              }`}
-            >
-              <Upload className="h-3 w-3" />
-              导入Excel
-            </button>
-            <button
-              onClick={() => setIsAddModalOpen(true)}
-              className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                isDark
-                  ? "bg-green-600 text-white hover:bg-green-700"
-                  : "bg-green-600 text-white hover:bg-green-700"
-              }`}
-            >
-              <Plus className="h-3 w-3" />
-              添加产品
-            </button>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
+                 <div className="flex flex-wrap items-center gap-3">
           <IOSInput
             value={searchCode}
             onChange={(value) => setSearchCode(value)}
@@ -397,41 +400,43 @@ export function ProductList() {
               <span className="text-xs text-slate-500">编码前缀:</span>
               <div className="flex flex-wrap gap-1">
                 {filteredPrefixes.map((prefix) => (
-                  <button
+                  <IOSButton
                     key={prefix}
+                    size="sm"
+                    variant={codePrefixFilter === prefix ? "primary" : "secondary"}
                     onClick={() => handleFilterByPrefix(prefix)}
-                    className={`px-2 py-0.5 rounded text-xs font-medium transition-colors cursor-pointer ${
-                      codePrefixFilter === prefix
-                        ? isDark
-                          ? "bg-blue-500 text-white"
-                          : "bg-blue-500 text-white"
-                        : isDark
-                        ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }`}
                   >
                     {prefix}
-                  </button>
+                  </IOSButton>
                 ))}
               </div>
             </div>
           )}
           {(codePrefixFilter || productNameFilter) && (
-            <button
-              onClick={() => {
+            <IOSButton size="sm" variant="danger" onClick={() => {
                 setCodePrefixFilter("");
                 setProductNameFilter("");
-              }}
-              className={`px-2 py-0.5 rounded text-xs font-medium transition-colors cursor-pointer ${
-                isDark
-                  ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                  : "bg-red-50 text-red-600 hover:bg-red-100"
-              }`}
-            >
+              }}>
               清除筛选
-            </button>
+            </IOSButton>
           )}
         </div>
+            <IOSButton size="sm" variant="secondary" onClick={() => setIsImportModalOpen(true)}>
+              <Upload className="h-3 w-3" />
+              导入Excel
+            </IOSButton>
+            <IOSButton size="sm" variant="success" onClick={() => setIsAddModalOpen(true)}>
+              <Plus className="h-3 w-3" />
+              添加产品
+            </IOSButton>
+            <IOSButton size="sm" variant="danger" onClick={() => setIsClearModalOpen(true)}>
+              <Trash2 className="h-3 w-3" />
+              清空数据
+            </IOSButton>
+          </div>
+        </div>
+
+   
       </div>
 
       {loading ? (
@@ -445,7 +450,7 @@ export function ProductList() {
         </div>
       ) : (
         <ThemeProvider theme={theme}>
-          <Box sx={{ height: "calc(100vh - 320px)" }}>
+          <Box sx={{ height: "calc(100vh - 250px)" }}>
             <DataGrid
               rows={rows}
               columns={columns}
@@ -520,56 +525,37 @@ export function ProductList() {
                 label="单位"
                 value={newProduct.unit}
                 onChange={(e) => setNewProduct({ ...newProduct, unit: e.target.value })}
-                sx={{
-                  "& .MuiInputLabel-root": { color: isDark ? "#94a3b8" : "#64748b" },
-                  "& .MuiOutlinedInput-root": {
-                    "& fieldset": { borderColor: isDark ? "#475569" : "#e2e8f0" },
-                  },
-                }}
+                sx={inputStyle(isDark)} // 直接应用样式
               />
               <TextField
                 label="产品名称"
                 value={newProduct.productName}
                 onChange={(e) => setNewProduct({ ...newProduct, productName: e.target.value })}
-                sx={{
-                  "& .MuiInputLabel-root": { color: isDark ? "#94a3b8" : "#64748b" },
-                  "& .MuiOutlinedInput-root": {
-                    "& fieldset": { borderColor: isDark ? "#475569" : "#e2e8f0" },
-                  },
-                }}
+                   sx={inputStyle(isDark)} // 直接应用样式
               />
               <TextField
                 label="工艺路线"
                 value={newProduct.processRoute}
                 onChange={(e) => setNewProduct({ ...newProduct, processRoute: e.target.value })}
-                sx={{
-                  "& .MuiInputLabel-root": { color: isDark ? "#94a3b8" : "#64748b" },
-                  "& .MuiOutlinedInput-root": {
-                    "& fieldset": { borderColor: isDark ? "#475569" : "#e2e8f0" },
-                  },
-                }}
+                  sx={inputStyle(isDark)} // 直接应用样式
               />
               <TextField
                 label="产品编号"
                 value={newProduct.productCode}
                 onChange={(e) => setNewProduct({ ...newProduct, productCode: e.target.value })}
-                sx={{
-                  "& .MuiInputLabel-root": { color: isDark ? "#94a3b8" : "#64748b" },
-                  "& .MuiOutlinedInput-root": {
-                    "& fieldset": { borderColor: isDark ? "#475569" : "#e2e8f0" },
-                  },
-                }}
+                  sx={inputStyle(isDark)} // 直接应用样式
               />
               <TextField
                 label="产品规格"
                 value={newProduct.productSpec}
                 onChange={(e) => setNewProduct({ ...newProduct, productSpec: e.target.value })}
-                sx={{
-                  "& .MuiInputLabel-root": { color: isDark ? "#94a3b8" : "#64748b" },
-                  "& .MuiOutlinedInput-root": {
-                    "& fieldset": { borderColor: isDark ? "#475569" : "#e2e8f0" },
-                  },
-                }}
+                  sx={inputStyle(isDark)} // 直接应用样式
+              />
+              <TextField
+                label="产品规格"
+                value={newProduct.productSpec}
+                onChange={(e) => setNewProduct({ ...newProduct, productSpec: e.target.value })}
+                sx={inputStyle(isDark)} // 直接应用样式
               />
               <FormControl fullWidth>
                 <InputLabel sx={{ color: isDark ? "#94a3b8" : "#64748b" }}>产品属性</InputLabel>
@@ -578,12 +564,7 @@ export function ProductList() {
                   onChange={(e) =>
                     setNewProduct({ ...newProduct, productAttribute: e.target.value })
                   }
-                  sx={{
-                    color: isDark ? "#e2e8f0" : "#1e293b",
-                    "& .MuiOutlinedInput-root": {
-                      "& fieldset": { borderColor: isDark ? "#475569" : "#e2e8f0" },
-                    },
-                  }}
+                    sx={inputStyle(isDark)} // 直接应用样式
                 >
                   <MenuItem value="自制">自制</MenuItem>
                   <MenuItem value="外购">外购</MenuItem>
@@ -599,23 +580,12 @@ export function ProductList() {
                 mt: 4,
               }}
             >
-              <Button
-                variant="outlined"
-                onClick={() => setIsAddModalOpen(false)}
-                sx={{
-                  color: isDark ? "#e2e8f0" : "#1e293b",
-                  borderColor: isDark ? "#475569" : "#e2e8f0",
-                }}
-              >
+              <IOSButton variant="outline" onClick={() => setIsAddModalOpen(false)}>
                 取消
-              </Button>
-              <Button
-                variant="contained"
-                onClick={handleAddProduct}
-                sx={{ bgcolor: "#9333ea", "&:hover": { bgcolor: "#7c3aed" } }}
-              >
+              </IOSButton>
+              <IOSButton variant="primary" onClick={handleAddProduct}>
                 保存
-              </Button>
+              </IOSButton>
             </Box>
           </Box>
         </Fade>
@@ -655,56 +625,31 @@ export function ProductList() {
                 label="单位"
                 value={editingProduct?.unit || ""}
                 onChange={(e) => setEditingProduct(prev => prev ? { ...prev, unit: e.target.value } : null)}
-                sx={{
-                  "& .MuiInputLabel-root": { color: isDark ? "#94a3b8" : "#64748b" },
-                  "& .MuiOutlinedInput-root": {
-                    "& fieldset": { borderColor: isDark ? "#475569" : "#e2e8f0" },
-                  },
-                }}
+                  sx={inputStyle(isDark)} // 直接应用样式
               />
               <TextField
                 label="产品名称"
                 value={editingProduct?.productName || ""}
                 onChange={(e) => setEditingProduct(prev => prev ? { ...prev, productName: e.target.value } : null)}
-                sx={{
-                  "& .MuiInputLabel-root": { color: isDark ? "#94a3b8" : "#64748b" },
-                  "& .MuiOutlinedInput-root": {
-                    "& fieldset": { borderColor: isDark ? "#475569" : "#e2e8f0" },
-                  },
-                }}
+                 sx={inputStyle(isDark)} // 直接应用样式
               />
               <TextField
                 label="工艺路线"
                 value={editingProduct?.processRoute || ""}
                 onChange={(e) => setEditingProduct(prev => prev ? { ...prev, processRoute: e.target.value } : null)}
-                sx={{
-                  "& .MuiInputLabel-root": { color: isDark ? "#94a3b8" : "#64748b" },
-                  "& .MuiOutlinedInput-root": {
-                    "& fieldset": { borderColor: isDark ? "#475569" : "#e2e8f0" },
-                  },
-                }}
+                   sx={inputStyle(isDark)} // 直接应用样式
               />
               <TextField
                 label="产品编号"
                 value={editingProduct?.productCode || ""}
                 onChange={(e) => setEditingProduct(prev => prev ? { ...prev, productCode: e.target.value } : null)}
-                sx={{
-                  "& .MuiInputLabel-root": { color: isDark ? "#94a3b8" : "#64748b" },
-                  "& .MuiOutlinedInput-root": {
-                    "& fieldset": { borderColor: isDark ? "#475569" : "#e2e8f0" },
-                  },
-                }}
+                 sx={inputStyle(isDark)} // 直接应用样式
               />
               <TextField
                 label="产品规格"
                 value={editingProduct?.productSpec || ""}
                 onChange={(e) => setEditingProduct(prev => prev ? { ...prev, productSpec: e.target.value } : null)}
-                sx={{
-                  "& .MuiInputLabel-root": { color: isDark ? "#94a3b8" : "#64748b" },
-                  "& .MuiOutlinedInput-root": {
-                    "& fieldset": { borderColor: isDark ? "#475569" : "#e2e8f0" },
-                  },
-                }}
+                 sx={inputStyle(isDark)} // 直接应用样式
               />
               <FormControl fullWidth>
                 <InputLabel sx={{ color: isDark ? "#94a3b8" : "#64748b" }}>产品属性</InputLabel>
@@ -713,12 +658,7 @@ export function ProductList() {
                   onChange={(e) =>
                     setEditingProduct(prev => prev ? { ...prev, productAttribute: e.target.value } : null)
                   }
-                  sx={{
-                    color: isDark ? "#e2e8f0" : "#1e293b",
-                    "& .MuiOutlinedInput-root": {
-                      "& fieldset": { borderColor: isDark ? "#475569" : "#e2e8f0" },
-                    },
-                  }}
+                    sx={inputStyle(isDark)} // 直接应用样式
                 >
                   <MenuItem value="自制">自制</MenuItem>
                   <MenuItem value="外购">外购</MenuItem>
@@ -734,23 +674,12 @@ export function ProductList() {
                 mt: 4,
               }}
             >
-              <Button
-                variant="outlined"
-                onClick={() => setIsEditModalOpen(false)}
-                sx={{
-                  color: isDark ? "#e2e8f0" : "#1e293b",
-                  borderColor: isDark ? "#475569" : "#e2e8f0",
-                }}
-              >
+              <IOSButton variant="outline" onClick={() => setIsEditModalOpen(false)}>
                 取消
-              </Button>
-              <Button
-                variant="contained"
-                onClick={handleSaveEditProduct}
-                sx={{ bgcolor: "#9333ea", "&:hover": { bgcolor: "#7c3aed" } }}
-              >
+              </IOSButton>
+              <IOSButton variant="primary" onClick={handleSaveEditProduct}>
                 保存
-              </Button>
+              </IOSButton>
             </Box>
           </Box>
         </Fade>
@@ -799,23 +728,64 @@ export function ProductList() {
                 gap: 2,
               }}
             >
-              <Button
-                variant="outlined"
-                onClick={() => setIsImportModalOpen(false)}
-                sx={{
-                  color: isDark ? "#e2e8f0" : "#1e293b",
-                  borderColor: isDark ? "#475569" : "#e2e8f0",
-                }}
-              >
+              <IOSButton variant="outline" onClick={() => setIsImportModalOpen(false)}>
                 取消
-              </Button>
-              <Button
-                variant="contained"
-                onClick={handleImportExcel}
-                sx={{ bgcolor: "#9333ea", "&:hover": { bgcolor: "#7c3aed" } }}
-              >
+              </IOSButton>
+              <IOSButton variant="primary" onClick={handleImportExcel}>
                 选择文件
-              </Button>
+              </IOSButton>
+            </Box>
+          </Box>
+        </Fade>
+      </Modal>
+
+      <Modal
+        open={isClearModalOpen}
+        onClose={() => setIsClearModalOpen(false)}
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Fade timeout={250} in={isClearModalOpen}>
+          <Box
+            sx={{
+              bgcolor: isDark ? "#1e293b" : "#ffffff",
+              borderRadius: "12px",
+              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+              width: "100%",
+              maxWidth: 400,
+              outline: "none",
+              p: 4,
+            }}
+          >
+            <Typography
+              variant="h6"
+              component="h3"
+              sx={{ fontWeight: 600, color: "#ef4444", mb: 2 }}
+            >
+              确认清空
+            </Typography>
+            <Typography
+              variant="body2"
+              sx={{ color: isDark ? "#94a3b8" : "#64748b", mb: 4 }}
+            >
+              确定要清空所有产品数据吗？此操作不可撤销！
+            </Typography>
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 2,
+              }}
+            >
+              <IOSButton variant="outline" onClick={() => setIsClearModalOpen(false)}>
+                取消
+              </IOSButton>
+              <IOSButton variant="danger" onClick={handleClearAllProducts}>
+                确认清空
+              </IOSButton>
             </Box>
           </Box>
         </Fade>
