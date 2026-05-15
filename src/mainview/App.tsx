@@ -8,7 +8,6 @@ import { LogList } from "@/components/log-list";
 import { ProductList } from "@/components/product-list/product-list";
 import { Drawing, DrawingFormData, CADConfig } from "@/lib/types";
 import { getElectroView } from "@/lib/rpc";
-import { useAppTheme } from "@/components/ThemeContext";
 import { IOSTabBar, IOSSlideView, TabKey } from "@/components/IOSTabBar";
 
 const DEFAULT_CAD_CONFIG: CADConfig = {
@@ -52,6 +51,7 @@ export default function DrawingManagerPage() {
   const loadDefaultCadConfig = async () => {
     const electrobun = getElectroView();
     const config = await electrobun.rpc!.request.getCadConfig({});
+     localStorage.setItem("cadConfig", JSON.stringify(config));
     setCadConfig(config);
 
   };
@@ -75,9 +75,7 @@ export default function DrawingManagerPage() {
     // 加载CAD配置
     const savedCADConfig = localStorage.getItem("cadConfig");
     const savedDbPath = localStorage.getItem("dbPath");
-    if (!savedCADConfig) {
-      loadDefaultCadConfig();
-    }
+    loadDefaultCadConfig();
     if (savedDbPath) {
       getElectroView()
         .rpc!.request.selectDatabase({ path: savedDbPath })

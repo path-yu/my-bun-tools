@@ -129,7 +129,7 @@ export type DrawingRPC = {
       };
       cloneDirectory: {
         params: { sourcePath: string; localPath: string; allowedExtensions?: string[] };
-        response: { success: boolean; error?: string };
+        response: { success: boolean; error?: string,lockedFiles?:string[] };
       };
       syncDirectory: {
         params: { sourcePath: string; localPath: string };
@@ -225,7 +225,7 @@ export type DrawingRPC = {
         response: { success: boolean; count?: number; error?: string };
       };
        checkAndUpdateFiles: {
-        params: { sourcePath: string; localPath: string };
+        params: { sourcePath: string; localPath: string; cloneSelectedTypes?: string[] };
         response: {
           success: boolean;
           error?: string;

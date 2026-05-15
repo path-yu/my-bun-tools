@@ -52,6 +52,7 @@
     "electrobun": "1.16.0",
     "elysia": "^1.4.28",
     "embla-carousel-react": "8.6.0",
+    "excel": "^1.0.1",
     "express": "^5.2.1",
     "iconv-lite": "^0.7.2",
     "input-otp": "1.4.2",

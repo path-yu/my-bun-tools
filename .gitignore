@@ -44,3 +44,5 @@ dist-ssr/
 
 # --- Bun 特有 ---
 .bun-build/
+.my_bom_data.json
+my_bom_data.json

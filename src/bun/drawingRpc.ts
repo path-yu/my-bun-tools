@@ -11,7 +11,7 @@ import {
   activateZwCadDocument,
   smartCadOpen,
 } from "./autoOpen";
-import { spawn } from 'node:child_process'
+import { spawn } from "node:child_process";
 import { CadBrand, Drawing, CAD_MAP, FileInfo, SyncLog } from "../lib/types";
 import {
   rollingChecksum,
@@ -37,7 +37,7 @@ export type DrawingRPC = {
       // 获取当前用户的cad配置
       getCadConfig: {
         params: {};
-        response: { path: string, type: string };
+        response: { path: string; type: string };
       };
       getAll: {
         params: {};
@@ -175,7 +175,7 @@ export type DrawingRPC = {
           localPath: string;
           allowedExtensions: string[];
         };
-        response: { success: boolean; error?: string };
+        response: { success: boolean; error?: string ,lockedFiles?:string[] };
       };
       syncDirectory: {
         params: { sourcePath: string; localPath: string };
@@ -213,7 +213,7 @@ export type DrawingRPC = {
         response: { success: boolean };
       };
       startWatchingLocalDirectory: {
-        params: { localPath: string, sourcePath: string };
+        params: { localPath: string; sourcePath: string };
         response: { success: boolean; error?: string };
       };
       getProducts: {
@@ -265,8 +265,8 @@ export type DrawingRPC = {
         params: {};
         response: { success: boolean; count?: number; error?: string };
       };
-     checkAndUpdateFiles: {
-        params: { sourcePath: string; localPath: string };
+      checkAndUpdateFiles: {
+        params: { sourcePath: string; localPath: string, cloneSelectedTypes: string[] };
         response: {
           success: boolean;
           error?: string;
@@ -281,7 +281,7 @@ export type DrawingRPC = {
   webview: RPCSchema<{
     requests: {
       fileChange: {
-        params: { fileName: string, isLocalChange: boolean };
+        params: { fileName: string; isLocalChange: boolean };
         response: void;
       };
     };
@@ -299,7 +299,9 @@ const activeLocalWatchers: Map<string, WatcherInfo> = new Map();
 
 // 获取日志文件路径（位于源目录的 .cad-cli/log.json）
 async function getLogFilePath(sourcePath?: string): Promise<string> {
-  const logDir = sourcePath ? path.join(sourcePath, ".cad-cli") : path.join(os.homedir(), ".cad-cli");
+  const logDir = sourcePath
+    ? path.join(sourcePath, ".cad-cli")
+    : path.join(os.homedir(), ".cad-cli");
   await fs.mkdir(logDir, { recursive: true });
   const logFilePath = path.join(logDir, "log.json");
 
@@ -326,7 +328,9 @@ async function readLogs(sourcePath?: string): Promise<SyncLog[]> {
 }
 
 // 保存日志
-async function saveLog(logData: Omit<SyncLog, "id" | "createdAt" | "createdBy">): Promise<boolean> {
+async function saveLog(
+  logData: Omit<SyncLog, "id" | "createdAt" | "createdBy">,
+): Promise<boolean> {
   try {
     const log: SyncLog = {
       id: crypto.randomUUID(),
@@ -353,22 +357,24 @@ async function cloneDirectoryRecursive(
   sourcePath: string,
   localPath: string,
   allowedExtensions?: string[],
-) {
+): Promise<{ lockedFiles: string[] }> {
   await fs.mkdir(localPath, { recursive: true });
   const entries = await fs.readdir(sourcePath, { withFileTypes: true });
+  const lockedFiles: string[] = [];
 
   for (const entry of entries) {
     const srcPath = path.join(sourcePath, entry.name);
     const destPath = path.join(localPath, entry.name);
 
     if (entry.isDirectory()) {
-      await cloneDirectoryRecursive(
+      const result = await cloneDirectoryRecursive(
         _fs,
         _path,
         srcPath,
         destPath,
         allowedExtensions,
       );
+      lockedFiles.push(...result.lockedFiles.map(f => path.join(entry.name, f)));
     } else {
       const ext = entry.name.split(".").pop()?.toLowerCase() || "";
       const isAllowed =
@@ -376,10 +382,16 @@ async function cloneDirectoryRecursive(
         allowedExtensions.length === 0 ||
         allowedExtensions.includes(ext);
       if (isAllowed) {
-        await smartCopyFile(srcPath, destPath);
+        try {
+          await smartCopyFile(srcPath, destPath);
+        } catch (copyErr: any) {
+          console.warn(`[跳过] 文件正被占用: ${entry.name},copyErr:${copyErr.message}`);
+          lockedFiles.push(entry.name);
+        }
       }
     }
   }
+  return { lockedFiles };
 }
 
 export async function computeChunkChecksums(
@@ -586,12 +598,17 @@ async function syncDirectoryRecursive(
 async function checkAndUpdateFilesRecursive(
   sourcePath: string,
   localPath: string,
-): Promise<{ copiedFiles: string[]; updatedFiles: string[]; skippedFiles: string[] }> {
+  cloneSelectedTypes?: string[],
+): Promise<{
+  copiedFiles: string[];
+  updatedFiles: string[];
+  skippedFiles: string[];
+}> {
   await fs.mkdir(localPath, { recursive: true });
-  
+
   const sourceEntries = await fs.readdir(sourcePath, { withFileTypes: true });
   const localEntries = await fs.readdir(localPath, { withFileTypes: true });
-  
+
   const localFileMap = new Map<string, { isDir: boolean; mtimeMs: number }>();
   for (const entry of localEntries) {
     const fullPath = path.join(localPath, entry.name);
@@ -601,24 +618,51 @@ async function checkAndUpdateFilesRecursive(
       mtimeMs: stat.mtimeMs,
     });
   }
-  
+
   const copiedFiles: string[] = [];
   const updatedFiles: string[] = [];
   const skippedFiles: string[] = [];
-  
+
   for (const entry of sourceEntries) {
     const srcFullPath = path.join(sourcePath, entry.name);
     const destFullPath = path.join(localPath, entry.name);
-    
+
+    if (cloneSelectedTypes && !cloneSelectedTypes.includes("all")) {
+      const ext = entry.name.split(".").pop()?.toLowerCase() || "";
+      const typeExtensions: Record<string, string[]> = {
+        dwg: ["dwg", "dxf", "dwt"],
+        excel: ["xls", "xlsx", "csv"],
+        word: ["doc", "docx", "txt"],
+        ppt: ["ppt", "pptx"],
+        pdf: ["pdf"],
+        image: ["jpg", "jpeg", "png", "gif", "bmp"],
+      };
+      const allowedExtensions = cloneSelectedTypes.flatMap(type => typeExtensions[type] || []);
+      if (!allowedExtensions.includes(ext)) {
+        skippedFiles.push(entry.name);
+        continue;
+      }
+    }
+
     if (entry.isDirectory()) {
-      const result = await checkAndUpdateFilesRecursive(srcFullPath, destFullPath);
-      copiedFiles.push(...result.copiedFiles.map(f => path.join(entry.name, f)));
-      updatedFiles.push(...result.updatedFiles.map(f => path.join(entry.name, f)));
-      skippedFiles.push(...result.skippedFiles.map(f => path.join(entry.name, f)));
+      const result = await checkAndUpdateFilesRecursive(
+        srcFullPath,
+        destFullPath,
+        cloneSelectedTypes,
+      );
+      copiedFiles.push(
+        ...result.copiedFiles.map((f) => path.join(entry.name, f)),
+      );
+      updatedFiles.push(
+        ...result.updatedFiles.map((f) => path.join(entry.name, f)),
+      );
+      skippedFiles.push(
+        ...result.skippedFiles.map((f) => path.join(entry.name, f)),
+      );
     } else {
       const localInfo = localFileMap.get(entry.name);
       const srcStat = await fs.stat(srcFullPath);
-      
+
       if (!localInfo) {
         await smartCopyFile(srcFullPath, destFullPath);
         copiedFiles.push(entry.name);
@@ -630,7 +674,7 @@ async function checkAndUpdateFilesRecursive(
       }
     }
   }
-  
+
   return { copiedFiles, updatedFiles, skippedFiles };
 }
 export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
@@ -835,6 +879,7 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
           await fs.mkdir(localPath, { recursive: true });
 
           const entries = await fs.readdir(sourcePath, { withFileTypes: true });
+          const lockedFiles: string[] = [];
 
           for (const entry of entries) {
             const srcPath = path.join(sourcePath, entry.name);
@@ -842,35 +887,30 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
 
             if (entry.isDirectory()) {
               // 如果是子目录，递归调用（注意：确保递归函数也包含同样的占用检查逻辑）
-              await cloneDirectoryRecursive(fs, path, srcPath, destPath, allowedExtensions);
+              const result = await cloneDirectoryRecursive(
+                fs,
+                path,
+                srcPath,
+                destPath,
+                allowedExtensions,
+              );
+              lockedFiles.push(...result.lockedFiles);
             } else {
               // 1. 扩展名过滤
               if (allowedExtensions && allowedExtensions.length > 0) {
                 const ext = entry.name.split(".").pop()?.toLowerCase() || "";
                 if (!allowedExtensions.includes(ext)) continue;
               }
-
-              // 2. 核心占用检查：尝试打开文件
-              let fileHandle;
-              try {
-                // 尝试以读写权限打开文件。如果文件被 AutoCAD 锁定，这里会抛出 EBUSY
-                fileHandle = await fs.open(srcPath, 'r+');
-              } catch (err: any) {
-                console.warn(`[跳过] 文件正被占用: ${entry.name}`);
-                continue; // 关键：跳过当前文件，进入下一次循环
-              } finally {
-                if (fileHandle) await fileHandle.close(); // 检查完一定要关闭句柄
-              }
-
               // 3. 执行复制（走到这一步说明文件没被锁定）
               try {
                 await fs.copyFile(srcPath, destPath);
               } catch (copyErr: any) {
-                console.warn(`[跳过] 文件正被占用: ${entry.name}`);
+                console.warn(`[跳过] 文件正被占用: ${entry.name},copyErr:${copyErr.message}`);
+                lockedFiles.push(entry.name);
               }
             }
           }
-          return { success: true };
+          return { success: true, lockedFiles: lockedFiles.length > 0 ? lockedFiles : undefined };
         } catch (error) {
           return {
             success: false,
@@ -918,7 +958,6 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
 
           const result = await smartCopyFile(srcFile, destFile);
 
-
           if (wasOpen && activeBrand) {
             if (fileName.toLowerCase().endsWith(".dwg")) {
               Utils.openExternal(destFile);
@@ -940,7 +979,13 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
           };
         }
       },
-      syncToSource: async ({ sourcePath, localPath, fileName, brandKey, logData }) => {
+      syncToSource: async ({
+        sourcePath,
+        localPath,
+        fileName,
+        brandKey,
+        logData,
+      }) => {
         try {
           const srcFile = path.join(localPath, fileName);
           const destFile = path.join(sourcePath, fileName);
@@ -951,11 +996,18 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
           let activeBrand: CadBrand | null = null;
           const openFiles = getZwCadFiles(brandKey);
           const openFile = openFiles.find((f) => f.path === destFile);
+          console.log(openFiles, brandKey);
+
+          console.log(openFile!.owner, os.userInfo().username);
+
           if (openFile) {
             wasOpen = true;
             activeBrand = brandKey;
             //判断是否为自己打开的文件，如果是则直接关闭，否则可能会误伤用户正在编辑的文件
-            if (openFile.owner === os.userInfo().username && fileName.toLowerCase().endsWith(".dwg")) {
+            if (
+              openFile.owner === os.userInfo().username &&
+              fileName.toLowerCase().endsWith(".dwg")
+            ) {
               closeZwCadDocument({
                 fileNameOrPath: destFile,
                 saveChanges: false,
@@ -1074,7 +1126,8 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
         } catch (error) {
           return {
             success: false,
-            error: error instanceof Error ? error.message : "在资源管理器中打开失败",
+            error:
+              error instanceof Error ? error.message : "在资源管理器中打开失败",
           };
         }
       },
@@ -1113,7 +1166,12 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
             };
           }
           const brandKey = detectCadBrand(cadConfig.path);
-          const message = await smartCadOpen(brandKey, cadConfig.path, filePath, isReadOnly);
+          const message = await smartCadOpen(
+            brandKey,
+            cadConfig.path,
+            filePath,
+            isReadOnly,
+          );
           return {
             success: true,
             message,
@@ -1125,7 +1183,14 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
           };
         }
       },
-      locateInCad: ({ cadType, dwgPath, x, y, zoomHeight = 500, isReadOnly = false }) => {
+      locateInCad: ({
+        cadType,
+        dwgPath,
+        x,
+        y,
+        zoomHeight = 500,
+        isReadOnly = false,
+      }) => {
         return locateInCad(cadType, dwgPath, x, y, zoomHeight, isReadOnly);
       },
       professionalCadNavigate: ({
@@ -1170,7 +1235,7 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
 
                 console.log(`文件 ${filename} 在源目录中 ${eventType}`);
                 // 只处理 change 事件
-                if (eventType === "change") {
+                if (eventType === "rename" || eventType === "change") {
                   console.log(`文件 ${filename} 内容发生变化`);
                   omitFileChange({ fileName: filename, isLocalChange: false });
                 }
@@ -1229,7 +1294,7 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
                 }
 
                 console.log(`本地文件 ${filename} 发生 ${eventType}`);
-                if (eventType === "change") {
+                if (eventType === "rename" || eventType === "change") {
                   omitFileChange({ fileName: filename, isLocalChange: true });
                 }
               }
@@ -1240,7 +1305,10 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
             console.error(`监听本地目录 ${localPath} 出错:`, error);
           });
 
-          activeLocalWatchers.set(localPath, { watcher, localPath: sourcePath });
+          activeLocalWatchers.set(localPath, {
+            watcher,
+            localPath: sourcePath,
+          });
           console.log(`开始监听本地目录: ${localPath}, 源目录: ${sourcePath}`);
 
           return { success: true };
@@ -1304,7 +1372,10 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
           return { success: true, product: result };
         } catch (error) {
           console.error("添加产品失败:", error);
-          return { success: false, error: error instanceof Error ? error.message : "添加产品失败" };
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : "添加产品失败",
+          };
         }
       },
       importProductsFromExcel: async ({ filePath }) => {
@@ -1313,11 +1384,21 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
           const workbook = XLSX.read(fileBuffer, { type: "buffer" });
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
-          let jsonData = XLSX.utils.sheet_to_json(worksheet, { header: ["sort", "unit", "productName", "processRoute", "productCode", "productSpec", "productAttribute"] });
-          jsonData = jsonData.slice(1, jsonData.length - 1);//去掉表头
+          let jsonData = XLSX.utils.sheet_to_json(worksheet, {
+            header: [
+              "sort",
+              "unit",
+              "productName",
+              "processRoute",
+              "productCode",
+              "productSpec",
+              "productAttribute",
+            ],
+          });
+          jsonData = jsonData.slice(1, jsonData.length - 1); //去掉表头
           const products: Product[] = [];
           for (let i = 1; i < jsonData.length; i++) {
-            const row = jsonData[i] as Product
+            const row = jsonData[i] as Product;
             products.push({
               unit: row.unit || "",
               productName: row.productName || "",
@@ -1332,7 +1413,10 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
           return { success: true, count };
         } catch (error) {
           console.error("导入产品失败:", error);
-          return { success: false, error: error instanceof Error ? error.message : "导入产品失败" };
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : "导入产品失败",
+          };
         }
       },
       deleteProduct: async ({ id }) => {
@@ -1341,7 +1425,10 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
           return { success: true };
         } catch (error) {
           console.error("删除产品失败:", error);
-          return { success: false, error: error instanceof Error ? error.message : "删除产品失败" };
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : "删除产品失败",
+          };
         }
       },
       getAllCodePrefixes: async () => {
@@ -1377,7 +1464,10 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
           return { success: true };
         } catch (error) {
           console.error("更新产品失败:", error);
-          return { success: false, error: error instanceof Error ? error.message : "更新产品失败" };
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : "更新产品失败",
+          };
         }
       },
       clearAllProducts: async () => {
@@ -1386,17 +1476,27 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
           return { success: true, count };
         } catch (error) {
           console.error("清空产品数据失败:", error);
-          return { success: false, error: error instanceof Error ? error.message : "清空产品数据失败" };
+          return {
+            success: false,
+            error: error instanceof Error ? error.message : "清空产品数据失败",
+          };
         }
       },
-      checkAndUpdateFiles: async ({ sourcePath, localPath }) => {
+      checkAndUpdateFiles: async ({ sourcePath, localPath, cloneSelectedTypes }) => {
         try {
           await fs.mkdir(localPath, { recursive: true });
-          
-          const sourceEntries = await fs.readdir(sourcePath, { withFileTypes: true });
-          const localEntries = await fs.readdir(localPath, { withFileTypes: true });
-          
-          const localFileMap = new Map<string, { isDir: boolean; mtimeMs: number }>();
+
+          const sourceEntries = await fs.readdir(sourcePath, {
+            withFileTypes: true,
+          });
+          const localEntries = await fs.readdir(localPath, {
+            withFileTypes: true,
+          });
+
+          const localFileMap = new Map<
+            string,
+            { isDir: boolean; mtimeMs: number }
+          >();
           for (const entry of localEntries) {
             const fullPath = path.join(localPath, entry.name);
             const stat = await fs.stat(fullPath);
@@ -1405,28 +1505,58 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
               mtimeMs: stat.mtimeMs,
             });
           }
-          
+
           const copiedFiles: string[] = [];
           const updatedFiles: string[] = [];
           const skippedFiles: string[] = [];
-          
+
           for (const entry of sourceEntries) {
             const srcFullPath = path.join(sourcePath, entry.name);
             const destFullPath = path.join(localPath, entry.name);
-            
+
+            if (cloneSelectedTypes && !cloneSelectedTypes.includes("all")) {
+              const ext = entry.name.split(".").pop()?.toLowerCase() || "";
+              const typeExtensions: Record<string, string[]> = {
+                dwg: ["dwg", "dxf", "dwt"],
+                excel: ["xls", "xlsx", "csv"],
+                word: ["doc", "docx", "txt"],
+                ppt: ["ppt", "pptx"],
+                pdf: ["pdf"],
+                image: ["jpg", "jpeg", "png", "gif", "bmp"],
+              };
+              const allowedExtensions = cloneSelectedTypes.flatMap(type => typeExtensions[type] || []);
+              if (!allowedExtensions.includes(ext)) {
+                skippedFiles.push(entry.name);
+                continue;
+              }
+            }
+
             if (entry.isDirectory()) {
-              const result = await checkAndUpdateFilesRecursive(srcFullPath, destFullPath);
-              copiedFiles.push(...result.copiedFiles.map(f => path.join(entry.name, f)));
-              updatedFiles.push(...result.updatedFiles.map(f => path.join(entry.name, f)));
-              skippedFiles.push(...result.skippedFiles.map(f => path.join(entry.name, f)));
+              const result = await checkAndUpdateFilesRecursive(
+                srcFullPath,
+                destFullPath,
+                cloneSelectedTypes
+              );
+              copiedFiles.push(
+                ...result.copiedFiles.map((f) => path.join(entry.name, f)),
+              );
+              updatedFiles.push(
+                ...result.updatedFiles.map((f) => path.join(entry.name, f)),
+              );
+              skippedFiles.push(
+                ...result.skippedFiles.map((f) => path.join(entry.name, f)),
+              );
             } else {
               const localInfo = localFileMap.get(entry.name);
               const srcStat = await fs.stat(srcFullPath);
-              
+
               if (!localInfo) {
                 await smartCopyFile(srcFullPath, destFullPath);
                 copiedFiles.push(entry.name);
-              } else if (!localInfo.isDir && srcStat.mtimeMs > localInfo.mtimeMs) {
+              } else if (
+                !localInfo.isDir &&
+                srcStat.mtimeMs > localInfo.mtimeMs
+              ) {
                 await smartCopyFile(srcFullPath, destFullPath);
                 updatedFiles.push(entry.name);
               } else {
@@ -1434,19 +1564,28 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
               }
             }
           }
-          
+
+          let message = `同步完成：新增 ${copiedFiles.length} 个文件，更新 ${updatedFiles.length} 个文件`;
+          if (skippedFiles.length > 0) {
+            message += `，跳过 ${skippedFiles.length} 个文件`;
+          }
+          if (cloneSelectedTypes && !cloneSelectedTypes.includes("all")) {
+            message += `（根据文件类型过滤）`;
+          }
+
           return {
             success: true,
             copiedFiles,
             updatedFiles,
             skippedFiles,
-            message: `同步完成：新增 ${copiedFiles.length} 个文件，更新 ${updatedFiles.length} 个文件，跳过 ${skippedFiles.length} 个文件`,
+            message,
           };
         } catch (error) {
           console.error("检查并更新文件失败:", error);
           return {
             success: false,
-            error: error instanceof Error ? error.message : "检查并更新文件失败",
+            error:
+              error instanceof Error ? error.message : "检查并更新文件失败",
             copiedFiles: [],
             updatedFiles: [],
             skippedFiles: [],
