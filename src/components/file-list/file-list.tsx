@@ -129,11 +129,6 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
     fileName: string;
     operation: "syncToSource" | "updateFromSource";
   }>({ isOpen: false, fileName: "", operation: "syncToSource" });
-  // 被占用文件弹窗状态
-  const [lockedFilesModal, setLockedFilesModal] = useState<{
-    isOpen: boolean;
-    files: string[];
-  }>({ isOpen: false, files: [] });
   // 点击一键更新所有文件ButtonLoading
   const [checkAndUpdateFilesLoading, setCheckAndUpdateFilesLoading] = useState(false);
   // 同步 sourcePath 到父组件
@@ -199,33 +194,6 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
       handleUpdateFile(data.fileName);
     }
   }
-  // 检查文件中所有需要更新的文件
-  const checkAndUpdateFiles = async () => {
-    try {
-      console.log(cloneSelectedTypes);
-
-      // const result = await getElectroView().rpc!.request.checkAndUpdateFiles({ 
-      //   sourcePath, 
-      //   localPath,
-      //   cloneSelectedTypes 
-      // });
-      // if (result.success) {
-      //   showToast(result.message || "检查更新文件成功", "success");
-      // } else {
-      //   showToast(result.error || "检查更新文件失败", "error");
-      // }
-    } catch (err) {
-      console.error("检查更新文件失败:", err);
-      showToast("检查更新文件失败", "error");
-    }
-  }
-  // 点击一键更新所有文件
-  const handleCheckAndUpdateFiles = async () => {
-    // 点击一键更新所有文件ButtonLoading
-    setCheckAndUpdateFilesLoading(true);
-    await checkAndUpdateFiles();
-    setCheckAndUpdateFilesLoading(false);
-  }
   // 启动监听
   const startWatching = async (hasToast = true) => {
     try {
@@ -234,8 +202,6 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
         localPath
       });
       eventBus.on('fileChanged', handleFileChange);
-      //如果当前
-      await checkAndUpdateFiles();
       if (result.success) {
         console.log(`成功启动对源目录 ${sourcePath} 的监听`);
         if (hasToast) {
@@ -448,13 +414,6 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
             startLocalWatching(false);
           }
         }, 1500);
-        
-        if (result.lockedFiles && result.lockedFiles.length > 0) {
-          setLockedFilesModal({
-            isOpen: true,
-            files: result.lockedFiles
-          });
-        }
       } else{
         showToast(result.error || "克隆失败", "error");
       }
@@ -950,7 +909,7 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
                 title={localPath}
               >
                 {localPath}
-                <IOSButton size="sm" variant="secondary" onClick={handleSelectLocal}>
+                <IOSButton className="ml-4" size="sm" variant="secondary" onClick={handleSelectLocal}>
                   选择
                 </IOSButton>
               </span>
@@ -1201,82 +1160,6 @@ export function FileList({ searchQuery: propSearchQuery, sourcePath: propSourceP
           </Box>
         </Fade>
       </Modal>
-
-      <Modal
-        open={lockedFilesModal.isOpen}
-        onClose={() => setLockedFilesModal(prev => ({ ...prev, isOpen: false }))}
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Fade timeout={250} in={lockedFilesModal.isOpen}>
-          <Box sx={{
-            bgcolor: isDark ? '#1e293b' : '#ffffff',
-            borderRadius: '12px',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-            width: '100%',
-            maxWidth: 440,
-            outline: 'none',
-            p: 0,
-          }}>
-            <Box sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              p: 2,
-              borderBottom: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
-            }}>
-              <Typography variant="h6" component="h3" sx={{ fontWeight: 600, color: isDark ? '#e2e8f0' : '#1e293b' }}>
-                文件被占用提示
-              </Typography>
-              <IOSButton size="sm" variant="secondary" onClick={() => setLockedFilesModal(prev => ({ ...prev, isOpen: false }))} className="!p-1">
-                <X className="h-5 w-5" />
-              </IOSButton>
-            </Box>
-
-            <Box sx={{ p: 2 }}>
-              <Typography variant="body2" sx={{ mb: 2, color: isDark ? '#e2e8f0' : '#1e293b' }}>
-                以下文件正被其他程序占用，无法克隆：
-              </Typography>
-              <Box sx={{
-                maxHeight: 200,
-                overflowY: 'auto',
-                bgcolor: isDark ? '#0f172a' : '#f8fafc',
-                borderRadius: '8px',
-                p: 2,
-              }}>
-                {lockedFilesModal.files.map((file, index) => (
-                  <Typography key={index} variant="body2" sx={{
-                    color: '#ef4444',
-                    mb: 1,
-                    '&:last-child': { mb: 0 },
-                  }}>
-                    • {file}
-                  </Typography>
-                ))}
-              </Box>
-              <Typography variant="body2" sx={{ mt: 2, color: isDark ? '#94a3b8' : '#64748b' }}>
-                请关闭相关程序后重新尝试克隆。
-              </Typography>
-            </Box>
-
-            <Box sx={{
-              display: 'flex',
-              justifyContent: 'flex-end',
-              gap: 1,
-              p: 2,
-              borderTop: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
-            }}>
-              <IOSButton variant="primary" onClick={() => setLockedFilesModal(prev => ({ ...prev, isOpen: false }))}>
-                确定
-              </IOSButton>
-            </Box>
-          </Box>
-        </Fade>
-      </Modal>
-
       <SyncReasonModal
         isOpen={syncReasonModal.isOpen}
         fileName={syncReasonModal.fileName}

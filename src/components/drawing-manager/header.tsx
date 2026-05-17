@@ -1,6 +1,7 @@
-import { FileText, Settings, Moon, Sun, Wrench, Info } from 'lucide-react'
+import { FileText, Settings, Moon, Sun, Wrench, Info, Minimize2, Maximize2, Square, X, Minus } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { useAppTheme } from '@/components/ThemeContext' // 确保路径指向你的 Context
+import { getElectroView } from '@/lib/rpc'
 
 interface HeaderProps {
   onOpenSettings: () => void
@@ -10,7 +11,24 @@ export function Header({ onOpenSettings }: HeaderProps) {
   // 1. 直接从全局 Context 获取主题状态和切换函数
   const { isDark, toggleTheme } = useAppTheme()
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isMaximized, setIsMaximized] = useState(false)
   const settingsRef = useRef<HTMLDivElement>(null)
+  const id = useRef<number>(1)
+  console.log(id.current)
+  const handleMinimize = () => {
+    getElectroView().rpc?.request.minimize({id: id.current})
+  }
+
+  const handleMaximize = () => {
+    getElectroView().rpc?.request.maximize({id: id.current})
+    setIsMaximized(!isMaximized)
+    //刷新窗口
+    window.location.reload()
+  }
+
+  const handleClose = () => {
+    getElectroView().rpc?.request.close({id: id.current})
+  }
 
   // 点击外部关闭下拉菜单
   useEffect(() => {
@@ -19,16 +37,22 @@ export function Header({ onOpenSettings }: HeaderProps) {
         setIsSettingsOpen(false)
       }
     }
+    if (sessionStorage.getItem("webViewId")) {
+      id.current = Number(sessionStorage.getItem("webViewId") || "0")
+    }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
-
+  
   return (
-    <header className={`sticky top-0 z-50 border-b transition-colors duration-300 ${
+    <header className={`sticky  top-0 z-50 border-b transition-colors duration-300 ${
       isDark 
         ? 'border-slate-800 bg-slate-900/80 backdrop-blur-xl' 
-        : 'border-slate-200 bg-white/80 backdrop-blur-xl'
-    }`}>
+        : 'border-slate-200 bg-white/80 backdrop-blur-xl '
+    }`} 
+    //@ts-ignore
+    style={{ WebkitAppRegion: 'drag'  }}
+    >
       {/* iOS 风格导航栏 */}
       <div className="flex h-14 items-center justify-between px-6">
         
@@ -114,8 +138,7 @@ export function Header({ onOpenSettings }: HeaderProps) {
                     }}
                     className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
                       isDark ? 'text-slate-200 hover:bg-slate-700' : 'text-slate-700 hover:bg-slate-100'
-                    }`}
-                  >
+                    }`}>
                     <div className={`flex h-6 w-6 items-center justify-center rounded-md ${
                       isDark ? 'bg-slate-700 text-blue-400' : 'bg-slate-200 text-slate-500'
                     }`}>
@@ -140,6 +163,47 @@ export function Header({ onOpenSettings }: HeaderProps) {
                 </div>
               </div>
             )}
+          </div>
+
+          {/* 窗口控制按钮  */}
+          <div className="flex items-center gap-0" 
+          // @ts-ignore
+          style={{ WebkitAppRegion: 'no-drag' }
+          }>
+            {/* 最小化 */}
+            <button
+              onClick={handleMinimize}
+              className={`flex h-9 w-10 items-center justify-center transition-colors ${
+                isDark 
+                  ? 'hover:bg-slate-700 text-slate-400' 
+                  : 'hover:bg-slate-100 text-slate-500'
+              }`}
+              title="最小化"
+            >
+              <Minus className="h-4 w-4" strokeWidth={2.5} />
+            </button>
+
+            {/* 最大化/还原 */}
+            {/* <button
+              onClick={handleMaximize}
+              className={`flex h-9 w-10 items-center justify-center transition-colors ${
+                isDark 
+                  ? 'hover:bg-slate-700 text-slate-400' 
+                  : 'hover:bg-slate-100 text-slate-500'
+              }`}
+              title={isMaximized ? "还原" : "最大化"}
+            >
+              {isMaximized ? <Square className="h-3.5 w-3.5" strokeWidth={2.5} /> : <Maximize2 className="h-3.5 w-3.5" strokeWidth={2.5} />}
+            </button> */}
+
+            {/* 关闭 */}
+            <button
+              onClick={handleClose}
+              className="flex h-9 w-10 items-center justify-center text-slate-400 hover:bg-red-500 hover:text-white transition-colors"
+              title="关闭"
+            >
+              <X className="h-4 w-4" strokeWidth={2.5} />
+            </button>
           </div>
         </div>
       </div>

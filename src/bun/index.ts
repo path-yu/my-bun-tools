@@ -28,18 +28,22 @@ async function getMainViewUrl(): Promise<string> {
 // Create the main application window
 const url = await getMainViewUrl();
 
- let webView = new BrowserWindow({
+let webView = new BrowserWindow({
   title: "Tools for drawing management",
   url,
-   frame: {
+  frame: {
     width: 1200,
     height: 700,
     x: 200,
     y: 200,
   },
-  
+  titleBarStyle: "hidden",
+  transparent: true,
   rpc: drawingRPC,
 });
+export  const mainData  = {
+  webView: webView
+}
 export function omitFileChange(data: { fileName: string; isLocalChange: boolean }) {
   // 检查 webView 是否存在，以及 rpc 是否已经初始化
   if (!webView || !webView.webview || !webView.webview.rpc) {

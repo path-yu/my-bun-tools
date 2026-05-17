@@ -1,5 +1,6 @@
 import { BrowserView, Utils, type RPCSchema } from "electrobun/bun";
 import { drawingSql, initializeDb } from "./db";
+import { BrowserWindow } from "electrobun/bun";
 import * as XLSX from "xlsx";
 import {
   locateInCad,
@@ -21,7 +22,7 @@ import {
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { watch, type FSWatcher } from "node:fs";
-import { omitFileChange } from ".";
+import { mainData, omitFileChange } from ".";
 import * as os from "os";
 import { getDbPath } from "./db";
 import { getDefaultDwgApp } from "../lib/utils-for-bun";
@@ -175,7 +176,7 @@ export type DrawingRPC = {
           localPath: string;
           allowedExtensions: string[];
         };
-        response: { success: boolean; error?: string ,lockedFiles?:string[] };
+        response: { success: boolean; error?: string, };
       };
       syncDirectory: {
         params: { sourcePath: string; localPath: string };
@@ -276,6 +277,18 @@ export type DrawingRPC = {
           message?: string;
         };
       };
+      minimize: {
+        params: { id: number };
+        response: void;
+      };
+      maximize: {
+        params: { id: number };
+         response: void;
+      };
+      close: {
+        params: { id: number };
+         response: void;
+      };
     };
   }>;
   webview: RPCSchema<{
@@ -283,6 +296,11 @@ export type DrawingRPC = {
       fileChange: {
         params: { fileName: string; isLocalChange: boolean };
         response: void;
+      };
+      //接受webViewId
+      responseWebViewId: {
+        params: {webViewId: string};
+        response: { };
       };
     };
     messages: {};
@@ -875,6 +893,7 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
       },
       cloneDirectory: async ({ sourcePath, localPath, allowedExtensions }) => {
         try {
+
           // 确保目标根目录存在
           await fs.mkdir(localPath, { recursive: true });
 
@@ -906,11 +925,26 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
                 await fs.copyFile(srcPath, destPath);
               } catch (copyErr: any) {
                 console.warn(`[跳过] 文件正被占用: ${entry.name},copyErr:${copyErr.message}`);
-                lockedFiles.push(entry.name);
+                // 如果文件类型为dwg,则关闭
+                if (entry.name.includes('dwg')) {
+                  const cadConfig = await getDefaultDwgApp();
+                  if (cadConfig) {
+                    const brandKey = detectCadBrand(cadConfig!.path);
+                    closeZwCadDocument({
+                      fileNameOrPath: destPath,
+                      saveChanges: false,
+                      cadBrand: brandKey
+                    });
+                    await fs.copyFile(srcPath, destPath);
+                    //重新打开文件
+                    Utils.openExternal(destPath);
+                  };
+
+                }
               }
             }
           }
-          return { success: true, lockedFiles: lockedFiles.length > 0 ? lockedFiles : undefined };
+          return { success: true, };
         } catch (error) {
           return {
             success: false,
@@ -934,7 +968,7 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
           let activeBrand: CadBrand | null = null;
 
           if (brandKey) {
-            const openFiles = getZwCadFiles(brandKey);
+            const openFiles = await getZwCadFiles(brandKey);
             const openFile = openFiles.find(
               (f) => f.path === destFile && !f.isReadOnly,
             );
@@ -994,7 +1028,8 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
 
           let wasOpen = false;
           let activeBrand: CadBrand | null = null;
-          const openFiles = getZwCadFiles(brandKey);
+          const openFiles =  await getZwCadFiles(brandKey);
+         
           const openFile = openFiles.find((f) => f.path === destFile);
           console.log(openFiles, brandKey);
 
@@ -1138,7 +1173,7 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
             return { isOpen: false };
           }
           const brandKey = detectCadBrand(cadConfig.path);
-          const openFiles = getZwCadFiles(brandKey);
+          const openFiles =  await getZwCadFiles(brandKey);
           const openFile = openFiles.find((f) => f.path === filePath);
           if (openFile) {
             //激活
@@ -1235,7 +1270,7 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
 
                 console.log(`文件 ${filename} 在源目录中 ${eventType}`);
                 // 只处理 change 事件
-                if (eventType === "rename" || eventType === "change") {
+                if (eventType === "rename" ) {
                   console.log(`文件 ${filename} 内容发生变化`);
                   omitFileChange({ fileName: filename, isLocalChange: false });
                 }
@@ -1294,7 +1329,7 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
                 }
 
                 console.log(`本地文件 ${filename} 发生 ${eventType}`);
-                if (eventType === "rename" || eventType === "change") {
+                if (eventType === "rename" ) {
                   omitFileChange({ fileName: filename, isLocalChange: true });
                 }
               }
@@ -1591,6 +1626,22 @@ export const drawingRPC = BrowserView.defineRPC<DrawingRPC>({
             skippedFiles: [],
           };
         }
+      },
+      minimize: (params: { id: number }) => {
+        mainData.webView.minimize()
+      },
+      maximize: (params: { id: number }) => {
+        const window = mainData.webView
+        if (window) {
+          if (window.isMaximized()) {
+            window.unmaximize();
+          } else {
+            window.maximize();
+          }
+        }
+      },
+      close: (params: { id: number }) => {
+        mainData.webView.close();
       },
     },
   },

@@ -11,6 +11,13 @@ export const rpc = Electroview.defineRPC<DrawingRPC >({
         eventBus.emit('fileChanged', data);
         // 这里可以添加处理逻辑，例如更新 UI 或者通知其他部分
       },
+      // 接受webViewId
+      responseWebViewId(params) {
+        console.log(3);
+        
+        sessionStorage.setItem("webViewId", params.webViewId);
+        return {};
+      },
     },
     messages: {},
   },

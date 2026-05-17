@@ -1,4 +1,4 @@
-import { exec, spawn } from "child_process";
+import { exec, spawn, ChildProcessWithoutNullStreams } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import { spawnSync } from 'bun';
@@ -12,6 +12,166 @@ const CAD_MAP = {
   AutoCAD: { key: "autocad", label: "AutoCAD", progId: "AutoCAD.Application" },
   GstarCAD: { key: "gstarcad", label: "浩辰 CAD", progId: "GstarCAD.Application" },
 };
+
+class PowerShellSession {
+  private process: ChildProcessWithoutNullStreams | null = null;
+  private isReady = false;
+  private pendingCommands: Array<{
+    script: string;
+    resolve: (output: string) => void;
+    reject: (error: Error) => void;
+    timeout: NodeJS.Timeout;
+  }> = [];
+  private outputBuffer = "";
+  private commandId = 0;
+  private lastError: string = "";
+
+  async init(): Promise<void> {
+    if (this.process) {
+      return;
+    }
+
+    return new Promise((resolve, reject) => {
+      this.process = spawn("powershell", [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "-",
+      ]);
+
+      this.process.stdout.on("data", (data) => {
+        this.outputBuffer += data.toString();
+        this.processOutput();
+      });
+
+      this.process.stderr.on("data", (data) => {
+        this.lastError += data.toString();
+      });
+
+      this.process.on("close", (code) => {
+        this.isReady = false;
+        this.process = null;
+        const error = new Error(`PowerShell 进程已关闭，退出码: ${code}`);
+        this.pendingCommands.forEach((cmd) => {
+          clearTimeout(cmd.timeout);
+          cmd.reject(error);
+        });
+        this.pendingCommands = [];
+      });
+
+      this.process.on("error", (err) => {
+        this.isReady = false;
+        this.process = null;
+        reject(err);
+      });
+
+      const initScript = `
+        $ErrorActionPreference = 'Stop'
+        Write-Host 'POWERSHELL_READY'
+        [Console]::Flush()
+      `;
+
+      const timeout = setTimeout(() => {
+        if (!this.isReady) {
+          this.process?.kill();
+          this.process = null;
+          reject(new Error("PowerShell 初始化超时"));
+        }
+      }, 10000);
+
+      this.process.stdout.once("data", (data) => {
+        if (data.toString().includes("POWERSHELL_READY")) {
+          clearTimeout(timeout);
+          this.isReady = true;
+          resolve();
+        }
+      });
+
+      this.process.stdin.write(initScript + "\n");
+    });
+  }
+
+  private processOutput() {
+    const delimiter = "===CMD_END===";
+    while (this.outputBuffer.includes(delimiter)) {
+      const index = this.outputBuffer.indexOf(delimiter);
+      const output = this.outputBuffer.substring(0, index).trim();
+      this.outputBuffer = this.outputBuffer.substring(index + delimiter.length);
+
+      if (this.pendingCommands.length > 0) {
+        const cmd = this.pendingCommands.shift()!;
+        clearTimeout(cmd.timeout);
+        cmd.resolve(output);
+      }
+    }
+  }
+
+  async execute(script: string, timeout: number = 30000): Promise<string> {
+    if (!this.process || !this.isReady) {
+      await this.init();
+    }
+
+    return new Promise((resolve, reject) => {
+      const cmdId = ++this.commandId;
+      const wrappedScript = `
+        try {
+          ${script}
+        } catch {
+          Write-Error $_.Exception.Message
+        }
+        Write-Host '===CMD_END==='
+        [Console]::Flush()
+      `;
+
+      const timeoutHandle = setTimeout(() => {
+        const idx = this.pendingCommands.findIndex((c) => c.script.includes(`CMD_ID:${cmdId}`));
+        if (idx !== -1) {
+          this.pendingCommands.splice(idx, 1);
+          reject(new Error("命令执行超时"));
+        }
+      }, timeout);
+
+      this.pendingCommands.push({
+        script: wrappedScript,
+        resolve,
+        reject,
+        timeout: timeoutHandle,
+      });
+
+      this.process!.stdin.write(wrappedScript + "\n");
+    });
+  }
+
+  async close(): Promise<void> {
+    if (this.process) {
+      this.process.stdin.end();
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      if (this.process.exitCode === null) {
+        this.process.kill();
+      }
+      this.process = null;
+      this.isReady = false;
+    }
+  }
+
+  isActive(): boolean {
+    return this.isReady && this.process !== null;
+  }
+}
+
+const psSession = new PowerShellSession();
+
+export async function executePowerShellCached(script: string, timeout: number = 30000): Promise<string> {
+  try {
+    return await psSession.execute(script, timeout);
+  } catch (err) {
+    writeLog(`[PowerShell缓存执行失败]: ${err}`);
+    psSession.close();
+    await psSession.init();
+    return await psSession.execute(script, timeout);
+  }
+}
 
 /**
  * 根据 CAD 程序路径识别品牌
@@ -218,7 +378,7 @@ export async function professionalCadNavigate(
 }
 
 /**
- * 内部函数：通过 PowerShell 操控已打开的 CAD
+ * 内部函数：通过 PowerShell 操控已打开的 CAD（使用缓存会话）
  */
 function runPowerShellLocate(
   progId: string,
@@ -251,46 +411,42 @@ function runPowerShellLocate(
     } catch { exit 1 }
   `;
 
-  const base64Str = Buffer.from(psCommands, "utf16le").toString("base64");
-  exec(
-    `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${base64Str}`,
-    (error, stdout) => {
-      if (!error && stdout.trim() === "OK") {
+  executePowerShellCached(psCommands, 5000)
+    .then((stdout) => {
+      if (stdout.trim() === "OK") {
         callback(true, "OK");
       } else {
         callback(false, "Wait");
       }
-    },
-  );
+    })
+    .catch(() => {
+      callback(false, "Wait");
+    });
 }
 
 /**
- * 辅助执行器
+ * 辅助执行器（使用缓存的 PowerShell 会话）
  */
 function executePowerShell(
   script: string,
   successMsg: string,
   failMsg: string,
 ): Promise<string> {
-  const base64Str = Buffer.from(script, "utf16le").toString("base64");
   return new Promise((resolve) => {
-    exec(
-      `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${base64Str}`,
-      { timeout: 10000 },
-      (error, stdout) => {
-        if (error || stdout.includes("PS_ERROR")) {
-          writeLog(`[PS执行失败]: ${stdout || error?.message}`);
+    executePowerShellCached(script, 10000)
+      .then((stdout) => {
+        if (stdout.includes("PS_ERROR")) {
+          writeLog(`[PS执行失败]: ${stdout}`);
           resolve(`[${failMsg}]: ${stdout}`);
-        }
-        if (error) {
-          resolve(`[${failMsg}]: CAD 实例未就绪或图纸被独占`);
         } else {
           console.log(stdout);
-
           resolve(`[${successMsg}]`);
         }
-      },
-    );
+      })
+      .catch((error) => {
+        writeLog(`[PS执行失败]: ${error.message}`);
+        resolve(`[${failMsg}]: CAD 实例未就绪或图纸被独占`);
+      });
   });
 }
 
@@ -340,7 +496,7 @@ export async function smartCadOpen(
     }
   `;
 
-  const checkResult = await executePowerShellAsync(checkScript);
+  const checkResult = await executePowerShellCached(checkScript, 5000);
 
   if (checkResult.includes("ALREADY_OPEN")) {
     writeLog(`[smartCadOpen] 文件已在 CAD 中打开，激活窗口`);
@@ -368,23 +524,19 @@ $targetDoc.Activate()
 Write-Host 'SUCCESS'
   `;
 
-  const base64Str = Buffer.from(openScript, "utf16le").toString("base64");
-
-  return new Promise((resolve) => {
-    exec(
-      `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${base64Str}`,
-      { timeout: 15000 },
-      (error, stdout) => {
-        if (!error && stdout.includes("SUCCESS")) {
-          writeLog(`[smartCadOpen] 文件打开成功`);
-          resolve(`[打开成功]: 文件已打开 (${isReadOnly ? "只读" : "编辑"})`);
-        } else {
-          writeLog(`[smartCadOpen] 打开失败: ${error?.message || stdout}`);
-          resolve(`[打开中]: 正在启动 CAD...`);
-        }
-      },
-    );
-  });
+  try {
+    const result = await executePowerShellCached(openScript, 15000);
+    if (result.includes("SUCCESS")) {
+      writeLog(`[smartCadOpen] 文件打开成功`);
+      return `[打开成功]: 文件已打开 (${isReadOnly ? "只读" : "编辑"})`;
+    } else {
+      writeLog(`[smartCadOpen] 打开失败: ${result}`);
+      return `[打开中]: 正在启动 CAD...`;
+    }
+  } catch (error) {
+    writeLog(`[smartCadOpen] 打开失败: ${error}`);
+    return `[打开中]: 正在启动 CAD...`;
+  }
 }
 
 /**
@@ -438,7 +590,7 @@ export function parseDwgPath(filePath: string) {
   };
 }
 
-export function getZwCadFiles(cadBrand: CadBrand): ZwDocument[] {
+export async function getZwCadFiles(cadBrand: CadBrand): Promise<ZwDocument[]> {
   const psCommand = `
     try {
       $zwcad = [Runtime.InteropServices.Marshal]::GetActiveObject("${cadBrand}.Application")
@@ -455,11 +607,22 @@ export function getZwCadFiles(cadBrand: CadBrand): ZwDocument[] {
     } catch { "[]" }
   `;
 
-  const { stdout } = spawnSync(["powershell", "-Command", psCommand]);
-  const output = new TextDecoder().decode(stdout).trim();
+  let output = "";
+  try {
+    output = await executePowerShellCached(psCommand, 5000);
+  } catch {
+    return [];
+  }
+  
   if (!output || output === "[]") return [];
 
-  const data = JSON.parse(output);
+  let data;
+  try {
+    data = JSON.parse(output);
+  } catch {
+    return [];
+  }
+  
   const rawList = Array.isArray(data) ? data : [data];
 
   return rawList.map((item: any) => {
@@ -507,10 +670,10 @@ export function getZwCadFiles(cadBrand: CadBrand): ZwDocument[] {
  * 切换中望CAD当前激活的图纸窗口
  * @param fileNameOrPath 想要激活的文件名（如 "A.dwg"）或完整路径
  */
-export function activateZwCadDocument(
+export async function activateZwCadDocument(
   cadBrand: CadBrand,
   fileNameOrPath: string,
-): boolean {
+): Promise<boolean> {
   // PowerShell 逻辑：
   // 1. 获取 ZWCAD 实例
   // 2. 遍历 Documents 集合寻找匹配项
@@ -532,16 +695,21 @@ export function activateZwCadDocument(
         $target.Activate()
         # 强制 CAD 窗口到前台（可选）
         # $zwcad.WindowState = 3 # 3 代表最大化/正常显示
-        return $true
+        Write-Host 'true'
+      } else {
+        Write-Host 'false'
       }
-      return $false
     } catch {
-      return $false
+      Write-Host 'false'
     }
   `;
 
-  const { stdout } = spawnSync(["powershell", "-Command", psCommand]);
-  const result = new TextDecoder().decode(stdout).trim();
+  let result = "";
+  try {
+    result = await executePowerShellCached(psCommand, 5000);
+  } catch {
+    return false;
+  }
 
   return result.toLowerCase() === "true";
 }
@@ -550,11 +718,11 @@ export function activateZwCadDocument(
  * @param fileNameOrPath 文件名或完整路径
  * @param saveChanges 是否保存更改（默认为 false，即放弃更改直接关闭）
  */
-export function closeZwCadDocument(data: {
+export async function closeZwCadDocument(data: {
   fileNameOrPath: string;
   saveChanges?: boolean;
   cadBrand: CadBrand;
-}): boolean {
+}): Promise<boolean> {
   const { fileNameOrPath, saveChanges = true, cadBrand } = data;
   // PowerShell 逻辑：
   // 1. 找到匹配的 Document 对象
@@ -577,16 +745,21 @@ export function closeZwCadDocument(data: {
         # $true = 保存并关闭, $false = 不保存直接关闭
         $save = if ("${saveChanges}" -eq "true") { $true } else { $false }
         $target.Close($save)
-        return $true
+        Write-Host 'true'
+      } else {
+        Write-Host 'false'
       }
-      return $false
     } catch {
-      return $false
+      Write-Host 'false'
     }
   `;
 
-  const { stdout } = spawnSync(["powershell", "-Command", psCommand]);
-  const result = new TextDecoder().decode(stdout).trim();
+  let result = "";
+  try {
+    result = await executePowerShellCached(psCommand, 5000);
+  } catch {
+    return false;
+  }
 
   return result.toLowerCase() === "true";
 }

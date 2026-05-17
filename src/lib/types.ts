@@ -129,7 +129,7 @@ export type DrawingRPC = {
       };
       cloneDirectory: {
         params: { sourcePath: string; localPath: string; allowedExtensions?: string[] };
-        response: { success: boolean; error?: string,lockedFiles?:string[] };
+        response: { success: boolean; error?: string };
       };
       syncDirectory: {
         params: { sourcePath: string; localPath: string };
@@ -235,6 +235,18 @@ export type DrawingRPC = {
           message?: string;
         };
       };
+      minimize: {
+        params: { id: number };
+        response: void;
+      };
+      maximize: {
+        params: { id: number };
+        response: void;
+      };
+      close: {
+        params: { id: number };
+        response: void;
+      };
     };
     messages: {
       fileChanged: {
@@ -247,6 +259,11 @@ export type DrawingRPC = {
       params: { fileName: string;isLocalChange: boolean };
       response: void;
     },
+    //接受webViewId
+    responseWebViewId: {
+      params: {webViewId: string};
+      response: {};
+    };
   }; messages: {
     
   } }>;
