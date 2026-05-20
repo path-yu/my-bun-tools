@@ -15,17 +15,23 @@
   )
   (setq lst (vl-string->list s))
   (vl-string-trim " " 
-    (vl-list->string 
-      (vl-remove-if-not 
-        '(lambda (code) 
-           (or (and (>= code 48) (<= code 57)) 
-               (and (>= code 65) (<= code 90))
-               (and (>= code 97) (<= code 122))
-               (= code 47) (= code 45) (= code 46) (= code 95) (= code 126) (= code 32))
-         )
-        lst
-      )
-    )
+                  (vl-list->string 
+                    (vl-remove-if-not 
+                      '(lambda (code) 
+                         (or (and (>= code 48) (<= code 57)) 
+                             (and (>= code 65) (<= code 90))
+                             (and (>= code 97) (<= code 122))
+                             (= code 47)
+                             (= code 45)
+                             (= code 46)
+                             (= code 95)
+                             (= code 126)
+                             (= code 32)
+                         )
+                       )
+                      lst
+                    )
+                  )
   )
 )
 
@@ -51,11 +57,11 @@
 ;; ==========================================================
 ;; 3. 单个图框处理逻辑 (软硬件结合提速版)
 ;; ==========================================================
-(defun process_single_box (pmin pmax local_txt ms_obj / ax ay ray y_hits int_pt cur_y_val top_left 
-                           s_min s_max cur_m cur_d cur_p cur_x cur_y_pt tx ty tstr tmp 
-                           ss_local_lines obj k dist min_dist box_w box_h len_y
-                           s_min_x s_max_x s_min_y s_max_y ax_minus_1000 y1 y2 y3
-                           first_char len_str
+(defun process_single_box (pmin pmax local_txt ms_obj / ax ay ray y_hits int_pt 
+                           cur_y_val top_left s_min s_max cur_m cur_d cur_p cur_x 
+                           cur_y_pt tx ty tstr tmp ss_local_lines obj k dist min_dist 
+                           box_w box_h len_y s_min_x s_max_x s_min_y s_max_y 
+                           ax_minus_1000 y1 y2 y3 first_char len_str
                           ) 
   (setq ax     (car pmax)
         ay     (cadr pmin)
@@ -72,7 +78,7 @@
                          )
     )
     (progn 
-      (setq ray (vla-addline ms_obj
+      (setq ray (vla-addline ms_obj 
                              (vlax-3d-point (list ax ay 0))
                              (vlax-3d-point (list ax (+ ay 1500) 0))
                 )
@@ -80,11 +86,16 @@
       (setq k 0)
       (repeat (sslength ss_local_lines) 
         (setq obj (vlax-ename->vla-object (ssname ss_local_lines k)))
-        (setq int_pt (vl-catch-all-apply 'vlax-invoke (list ray 'IntersectWith obj acextendnone)))
+        (setq int_pt (vl-catch-all-apply 'vlax-invoke 
+                                         (list ray 'IntersectWith obj acextendnone)
+                     )
+        )
         (if (and int_pt (not (vl-catch-all-error-p int_pt))) 
           (while (>= (length int_pt) 3) 
             (setq cur_y_val (cadr int_pt))
-            (if (not (member cur_y_val y_hits)) (setq y_hits (cons cur_y_val y_hits)))
+            (if (not (member cur_y_val y_hits)) 
+              (setq y_hits (cons cur_y_val y_hits))
+            )
             (setq int_pt (cdddr int_pt))
           )
         )
@@ -101,10 +112,12 @@
   (if (>= len_y 2) 
     (progn 
       (setq top_left (list (car pmin) (cadr pmax)))
-      (setq s_min (list (car top_left) (- (cadr top_left) (* box_h 0.1))) 
-            s_max (list (+ (car top_left) (* box_w 0.5)) (+ (cadr top_left) (* box_h 0.01))) 
+      (setq s_min (list (car top_left) (- (cadr top_left) (* box_h 0.1)))
+            s_max (list (+ (car top_left) (* box_w 0.5)) 
+                        (+ (cadr top_left) (* box_h 0.01))
+                  )
       )
-      
+
       (setq cur_m    ""
             cur_d    ""
             cur_p    ""
@@ -114,61 +127,92 @@
       )
 
       ;; 预裁剪区间变量缓存
-      (setq s_min_x (car s_min)
-            s_max_x (car s_max)
-            s_min_y (cadr s_min)
-            s_max_y (cadr s_max)
+      (setq s_min_x       (car s_min)
+            s_max_x       (car s_max)
+            s_min_y       (cadr s_min)
+            s_max_y       (cadr s_max)
             ax_minus_1000 (- ax 1000)
-            y1 (if (>= len_y 4) (nth 1 y_hits) nil)
-            y2 (if (>= len_y 4) (nth 2 y_hits) nil)
-            y3 (if (>= len_y 4) (nth 3 y_hits) nil)
+            y1            (if (>= len_y 4) (nth 1 y_hits) nil)
+            y2            (if (>= len_y 4) (nth 2 y_hits) nil)
+            y3            (if (>= len_y 4) (nth 3 y_hits) nil)
       )
 
       ;; 此时传入的 local_txt 是通过 C++ 空间索引裁剪后的极小集合，数量一般小于 50 个
       (foreach item local_txt 
-        (setq tx (car (car item))
-              ty (cadr (car item))
+        (setq tx   (car (car item))
+              ty   (cadr (car item))
               tstr (cadr item)
-              len_str (strlen tstr)
         )
-        
-        ;; A. 寻找产品编码
-        (if (and (>= tx s_min_x) (<= tx s_max_x) (>= ty s_min_y) (<= ty s_max_y) (> len_str 1))
+
+        ;; 【核心修复】：注入防御性代码，确保 tstr 必须是字符串且不为 nil
+        (if (and tstr (= (type tstr) 'STR)) 
           (progn 
-            (setq tmp (clean_final_logic tstr))
-            (if (and (/= tmp "") 
-                     (setq first_char (ascii (substr tmp 1 1)))
-                     (>= first_char 48) (<= first_char 57)              
-                     (not (member tmp '("1" "2" "3" "4" "5")))          
-                )
-              (progn
-                (setq dist (distance top_left (list tx ty)))
-                (if (< dist min_dist)
-                  (setq min_dist dist
-                        cur_p     tmp)
+            (setq len_str (strlen tstr))
+
+            ;; A. 寻找产品编码
+            (if 
+              (and (>= tx s_min_x) 
+                   (<= tx s_max_x)
+                   (>= ty s_min_y)
+                   (<= ty s_max_y)
+                   (> len_str 1)
+              )
+              (progn 
+                (setq tmp (clean_final_logic tstr))
+                (if 
+                  (and (/= tmp "") 
+                       (setq first_char (ascii (substr tmp 1 1)))
+                       (>= first_char 48)
+                       (<= first_char 57)
+                       (not (member tmp '("1" "2" "3" "4" "5")))
+                  )
+                  (progn 
+                    (setq dist (distance top_left (list tx ty)))
+                    (if (< dist min_dist) 
+                      (setq min_dist dist
+                            cur_p    tmp
+                      )
+                    )
+                  )
                 )
               )
             )
-          )
-        )
 
-        ;; B. 寻找图号和物料编码
-        (if (and (> tx ax_minus_1000) (< tx ax) (> len_str 2)) 
-          (cond 
-            ((and y1 y2 (>= ty y1) (<= ty y2))
-             (setq tmp (clean_final_logic tstr))
-             (if (> (strlen tmp) 2) (setq cur_m tmp cur_x tx cur_y_pt ty))
+            ;; B. 寻找图号和物料编码
+            (if (and (> tx ax_minus_1000) (< tx ax) (> len_str 2)) 
+              (cond 
+                ((and y1 y2 (>= ty y1) (<= ty y2))
+                 (setq tmp (clean_final_logic tstr))
+                 (if (> (strlen tmp) 2) 
+                   (setq cur_m    tmp
+                         cur_x    tx
+                         cur_y_pt ty
+                   )
+                 )
+                )
+                ((and y2 
+                      y3
+                      (>= ty y2)
+                      (<= ty y3)
+                      (not (vl-string-search "MPa" tstr))
+                      (not (vl-string-search "m3" tstr))
+                 )
+                 (setq tmp (clean_final_logic tstr))
+                 (if (> (strlen tmp) 2) (setq cur_d tmp))
+                )
+              )
             )
-            ((and y2 y3 (>= ty y2) (<= ty y3) (not (vl-string-search "MPa" tstr)) (not (vl-string-search "m3" tstr)))
-             (setq tmp (clean_final_logic tstr))
-             (if (> (strlen tmp) 2) (setq cur_d tmp))
-            )
-          )
-        )
-      )
+          ) ;; end progn
+        ) ;; end if STR
+      ) ;; end foreach
 
       (if (and (/= cur_m "") (/= cur_d "")) 
-        (list cur_m cur_d (if (/= cur_p "") cur_p "None") (rtos cur_x 2 3) (rtos cur_y_pt 2 3))
+        (list cur_m 
+              cur_d
+              (if (/= cur_p "") cur_p "None")
+              (rtos cur_x 2 3)
+              (rtos cur_y_pt 2 3)
+        )
         nil
       )
     )
@@ -193,13 +237,27 @@
       (foreach item data_list 
         (setq json_str (strcat json_str 
                                "{"
-                               "\"materialCode\":\"" (nth 0 item) "\","
-                               "\"drawingNumber\":\"" (nth 1 item) "\","
-                               "\"fileName\":\"" dwg_name "\","
-                               "\"remarks\":\"" (nth 2 item) "\","
-                               "\"x\":\"" (nth 3 item) "\","
-                               "\"y\":\"" (nth 4 item) "\""
-                               "}"))
+                               "\"materialCode\":\""
+                               (nth 0 item)
+                               "\","
+                               "\"drawingNumber\":\""
+                               (nth 1 item)
+                               "\","
+                               "\"fileName\":\""
+                               dwg_name
+                               "\","
+                               "\"remarks\":\""
+                               (nth 2 item)
+                               "\","
+                               "\"x\":\""
+                               (nth 3 item)
+                               "\","
+                               "\"y\":\""
+                               (nth 4 item)
+                               "\""
+                               "}"
+                       )
+        )
         (setq i (1+ i))
         (if (< i (length data_list)) (setq json_str (strcat json_str ",")))
       )
@@ -207,7 +265,11 @@
 
       (setq http (vlax-create-object "MSXML2.XMLHTTP"))
       (vlax-invoke-method http 'open "POST" url :vlax-false)
-      (vlax-invoke-method http 'setRequestHeader "Content-Type" "application/json;charset=utf-8")
+      (vlax-invoke-method http 
+                          'setRequestHeader
+                          "Content-Type"
+                          "application/json;charset=utf-8"
+      )
 
       (princ "\n[网络] 发送 POST 请求...")
       (vl-catch-all-apply 'vlax-invoke-method (list http 'send json_str))
@@ -223,61 +285,66 @@
 )
 
 ;; ==========================================================
-;; 5. 公共函数 - 收集所有文字
-;; ==========================================================
-(defun collect_all_text_data (/ ss_txt i ed)
-  (setq txt_data '())
-  (if (setq ss_txt (ssget "X" '((0 . "TEXT,MTEXT"))))
-    (repeat (setq i (sslength ss_txt))
-      (setq ed (entget (ssname ss_txt (setq i (1- i)))))
-      (setq txt_data (cons (list (cdr (assoc 10 ed)) (cdr (assoc 1 ed))) txt_data))
-    )
-  )
-  txt_data
-)
-
-;; ==========================================================
 ;; 6. 公共函数 - 扫描并提取图框数据 (软硬件结合神速版)
 ;; ==========================================================
-(defun scan_and_extract_boxes (/ ss_all i ed vlist p_min p_max area res xs ys ss_local_txt k_txt ed_txt local_txt_list g_ms)
-  (setq final_list '() unique_list '())
-  
+(defun scan_and_extract_boxes (/ ss_all i ed vlist p_min p_max area res xs ys 
+                               ss_local_txt k_txt ed_txt local_txt_list g_ms
+                              ) 
+  (setq final_list  '()
+        unique_list '()
+  )
+
   ;; 【至关重要】在最外层只获取一次 ModelSpace COM 对象，绝不让内层图框循环重复获取
   (setq g_ms (vla-get-modelspace (vla-get-activedocument (vlax-get-acad-object))))
-  
-  (if (setq ss_all (ssget "X" '((0 . "LWPOLYLINE") (70 . 1))))
-    (progn
+
+  (if (setq ss_all (ssget "X" '((0 . "LWPOLYLINE") (70 . 1)))) 
+    (progn 
       (setq i 0)
-      (repeat (sslength ss_all)
+      (repeat (sslength ss_all) 
         (setq ed (entget (ssname ss_all i)))
-        (setq vlist (mapcar 'cdr (vl-remove-if-not '(lambda (x) (= 10 (car x))) ed)))
-        
-        (setq xs (mapcar 'car vlist)
-              ys (mapcar 'cadr vlist)
+        (setq vlist (mapcar 'cdr 
+                            (vl-remove-if-not '(lambda (x) (= 10 (car x))) ed)
+                    )
+        )
+
+        (setq xs    (mapcar 'car vlist)
+              ys    (mapcar 'cadr vlist)
               p_min (list (apply 'min xs) (apply 'min ys))
               p_max (list (apply 'max xs) (apply 'max ys))
-              area (abs (* (- (car p_max) (car p_min)) (- (cadr p_max) (cadr p_min)))))
-        
-        (if (and (> area 900000.0) (< area 800000000.0))
-          (progn
+              area  (abs 
+                      (* (- (car p_max) (car p_min)) (- (cadr p_max) (cadr p_min)))
+                    )
+        )
+
+        (if (and (> area 900000.0) (< area 800000000.0)) 
+          (progn 
             ;; 【硬件级加速回归】：利用 CAD 底层 C++ 级的空间窗选，瞬间秒杀 5.5 万条文字
             (setq local_txt_list '())
-            (if (setq ss_local_txt (ssget "C" p_min p_max '((0 . "TEXT,MTEXT"))))
-              (progn
+            (if (setq ss_local_txt (ssget "C" p_min p_max '((0 . "TEXT,MTEXT")))) 
+              (progn 
                 (setq k_txt 0)
-                (repeat (sslength ss_local_txt)
+                (repeat (sslength ss_local_txt) 
                   (setq ed_txt (entget (ssname ss_local_txt k_txt)))
-                  (setq local_txt_list (cons (list (cdr (assoc 10 ed_txt)) (cdr (assoc 1 ed_txt))) local_txt_list))
+                  (setq local_txt_list (cons 
+                                         (list (cdr (assoc 10 ed_txt)) 
+                                               (cdr (assoc 1 ed_txt))
+                                         )
+                                         local_txt_list
+                                       )
+                  )
                   (setq k_txt (1+ k_txt))
                 )
               )
             )
-            
+
             ;; 传入全局单例 g_ms 和 C++ 高效裁剪出的极小子文本集合
-            (if (setq res (process_single_box p_min p_max local_txt_list g_ms))
-              (if (not (member (strcat (nth 0 res) (nth 2 res)) unique_list))
-                (setq final_list (cons res final_list)
-                      unique_list (cons (strcat (nth 0 res) (nth 2 res)) unique_list))
+            (if (setq res (process_single_box p_min p_max local_txt_list g_ms)) 
+              (if (not (member (strcat (nth 0 res) (nth 2 res)) unique_list)) 
+                (setq final_list  (cons res final_list)
+                      unique_list (cons (strcat (nth 0 res) (nth 2 res)) 
+                                        unique_list
+                                  )
+                )
               )
             )
           )
@@ -353,7 +420,7 @@
             (vl-princ-to-string p2_new)
     )
   )
-  (command "-PLOT" "Y" "" "DWG To PDF.pc5" "ISO full bleed A3 (297.00 x 420.00 毫米)" 
+  (command "-PLOT" "Y" "" "DWG To PDF.pc3" "ISO full bleed A3 (297.00 x 420.00 毫米)" 
            "M" "P" "N" "W" "non" p1_new "non" p2_new "F" "C" "Y" "monochrome.ctb" "Y" "A" path 
            "N" "Y"
   )
@@ -368,15 +435,15 @@
 
   (princ (strcat "\n[成功導出] " pdfname))
 )
-(defun c:DelOLE (/ ss i ent)
+(defun c:DelOLE (/ ss i ent) 
   (vl-load-com)
   (princ "\n正在掃描並刪除全局 OLE 圖片...")
-  
+
   ;; 使用 ssget "X" 進行全局搜索，過濾條件為 OLE2FRAME
-  (if (setq ss (ssget "X" '((0 . "OLE2FRAME"))))
-    (progn
+  (if (setq ss (ssget "X" '((0 . "OLE2FRAME")))) 
+    (progn 
       (setq i 0)
-      (repeat (sslength ss)
+      (repeat (sslength ss) 
         (setq ent (ssname ss i))
         (entdel ent) ; 執行刪除
         (setq i (1+ i))
@@ -390,58 +457,93 @@
 )
 (princ)
 ;; ==========================================================
-;; 8. BEXK 命令 - 框选上传（保留原有逻辑）
+;; 8. BEXK 命令 - 框选上传（完美修复参数少报错版）
 ;; ==========================================================
-(defun c:BEXK (/ ss_pick i ed vlist p_min p_max area res unique_list final_list)
+(defun c:BEXK (/ ss_pick i ed vlist p_min p_max area res unique_list final_list g_ms 
+               ss_local_txt k_txt ed_txt local_txt_list
+              ) 
   (setvar "CMDECHO" 0)
-  (setq final_list '() unique_list '())
+  (vl-load-com)
+  (setq final_list  '()
+        unique_list '()
+  )
+
+  ;; 获取一次全局 ModelSpace 对象传递给内层
+  (setq g_ms (vla-get-modelspace (vla-get-activedocument (vlax-get-acad-object))))
 
   (princ "\n请框选需要提取的图框区域...")
   (if (setq ss_pick (ssget '((0 . "LWPOLYLINE") (70 . 1)))) 
     (progn 
-      (setq txt_data (collect_all_text_data))
-
       (setq i 0)
       (repeat (sslength ss_pick) 
         (setq ed (entget (ssname ss_pick i)))
-        (setq vlist (mapcar 'cdr (vl-remove-if-not '(lambda (x) (= 10 (car x))) ed)))
+        (setq vlist (mapcar 'cdr 
+                            (vl-remove-if-not '(lambda (x) (= 10 (car x))) ed)
+                    )
+        )
         (setq p_min (list (apply 'min (mapcar 'car vlist)) 
-                          (apply 'min (mapcar 'cadr vlist)))
+                          (apply 'min (mapcar 'cadr vlist))
+                    )
               p_max (list (apply 'max (mapcar 'car vlist)) 
-                          (apply 'max (mapcar 'cadr vlist)))
-              area (abs (* (- (car p_max) (car p_min)) (- (cadr p_max) (cadr p_min)))))
-        
-        (if (and (> area 1000000.0) (< area 400000000.0))
-          (if (setq res (process_single_box p_min p_max))
-            (if (not (member (strcat (car res) (cadr res)) unique_list))
-              (setq final_list (cons res final_list)
-                    unique_list (cons (strcat (car res) (cadr res)) unique_list))
+                          (apply 'max (mapcar 'cadr vlist))
+                    )
+              area  (abs 
+                      (* (- (car p_max) (car p_min)) (- (cadr p_max) (cadr p_min)))
+                    )
+        )
+
+        (if (and (> area 1000000.0) (< area 400000000.0)) 
+          (progn 
+            ;; 同样利用高效的底层 C++ 空间窗选剥离出当前框内的文字
+            (setq local_txt_list '())
+            (if (setq ss_local_txt (ssget "C" p_min p_max '((0 . "TEXT,MTEXT")))) 
+              (progn 
+                (setq k_txt 0)
+                (repeat (sslength ss_local_txt) 
+                  (setq ed_txt (entget (ssname ss_local_txt k_txt)))
+                  (setq local_txt_list (cons 
+                                         (list (cdr (assoc 10 ed_txt)) 
+                                               (cdr (assoc 1 ed_txt))
+                                         )
+                                         local_txt_list
+                                       )
+                  )
+                  (setq k_txt (1+ k_txt))
+                )
+              )
+            )
+
+            ;; 以完整的 4 个参数调用核心函数
+            (if (setq res (process_single_box p_min p_max local_txt_list g_ms)) 
+              (if (not (member (strcat (car res) (cadr res)) unique_list)) 
+                (setq final_list  (cons res final_list)
+                      unique_list (cons (strcat (car res) (cadr res)) unique_list)
+                )
+              )
             )
           )
         )
         (setq i (1+ i))
       )
-      
+
       (princ (strcat "\n共提取 " (itoa (length final_list)) " 个有效图框。"))
-      ;; (upload_to_backend final_list)   ; 已注释，保持原样
+      (upload_to_backend final_list)
     )
     (princ "\n[取消] 未选中任何闭合多段线。")
   )
   (princ)
 )
-
 ;; ==========================================================
 ;; 9. EXK 命令 - 全图自动扫描并上传
 ;; ==========================================================
-(defun c:EXK (/ final_list)
+(defun c:EXK (/ final_list) 
   (setvar "CMDECHO" 0)
   (princ "\n[系统] 正在启动全图自动扫描 (调试模式)...")
 
-  (setq txt_data (collect_all_text_data))
   (setq final_list (scan_and_extract_boxes))
 
-  (if (> (length final_list) 0)
-    (progn
+  (if (> (length final_list) 0) 
+    (progn 
       (princ "\n\n==================== 自动提取结果预览 ====================")
       (princ (strcat "\n当前图纸: " (getvar "DWGNAME")))
       (princ (strcat "\n共发现有效图框: " (itoa (length final_list)) " 个"))
@@ -459,14 +561,14 @@
   (vl-load-com)
   ;; --- 新增：保存当前图层并切换到 "0" ---
   (setq old_layer (getvar "CLAYER"))
-  (if (tblsearch "LAYER" "0")
+  (if (tblsearch "LAYER" "0") 
     (setvar "CLAYER" "0")
   )
-  
+
   (setvar "CMDECHO" 0)
   ;;全局關閉圖片邊框打印
   (setvar "IMAGEFRAME" 2)
-   ;; 1. 获取桌面路径
+  ;; 1. 获取桌面路径
   (setq userProfile (getenv "USERPROFILE"))
   (setq picPath (strcat userProfile "\\Desktop\\签名"))
   ;; (setq picPath "\\\\192.168.1.100\\SJWH\\签名")
@@ -562,45 +664,46 @@
 ;; ==========================================================
 ;; 4. GTA 命令 - 提取数据并导出带 ZOOM 命令的 TXT
 ;; ==========================================================
-(defun c:GTA (/ final_list filename file_ptr row item_str cur_x cur_y zoom_cmd)
+(defun c:GTA (/ final_list filename file_ptr row item_str cur_x cur_y zoom_cmd) 
   (setvar "CMDECHO" 0)
   (princ "\n[系统] 正在启动全图扫描与数据提取...")
 
-  (setq txt_data (collect_all_text_data))
   (setq final_list (scan_and_extract_boxes))
 
   (if (and final_list (> (length final_list) 0)) 
     (progn 
       (setq filename (getfiled "导出数据为 TXT 文件" "物料清单_带定位命令" "txt" 1))
-      (if filename
-        (progn
+      (if filename 
+        (progn 
           (setq file_ptr (open filename "w"))
           ;; 写入表头
-          (write-line "物料编码 | 物料编码 | 图号 | 产品编码 | ZOOM命令" file_ptr)
-          
+          (write-line "物料编码  | 图号 | 产品编码 | ZOOM命令" file_ptr)
+
           (foreach row (reverse final_list) 
-            (setq cur_x (nth 3 row) cur_y (nth 4 row))
-            
+            (setq cur_x (nth 3 row)
+                  cur_y (nth 4 row)
+            )
+
             ;; 构造 ZOOM 命令字符串
             (setq zoom_cmd (strcat "ZOOM C " cur_x "," cur_y " 500"))
-            
-            ;; 实时视图定位反馈
-            (command "_.ZOOM" "C" (list (atof cur_x) (atof cur_y)) 500)
-            (princ (strcat "\n定位至物料: " (nth 0 row)))
 
             ;; 构造写入 TXT 的数据行
             (setq item_str (strcat 
-                             (nth 0 row) " | " 
-                             (nth 1 row) " | " 
-                             (nth 2 row) " | " 
-                             zoom_cmd))
-            
+                             (nth 0 row)
+                             " | "
+                             (nth 1 row)
+                             " | "
+                             (nth 2 row)
+                             " | "
+                             zoom_cmd
+                           )
+            )
+
             (write-line item_str file_ptr)
           )
-          
+
           (close file_ptr)
           (princ (strcat "\n\n[成功] 数据已保存至: " filename))
-          (command "_.ZOOM" "E")
         )
         (princ "\n[提示] 操作已取消。")
       )
@@ -616,7 +719,11 @@
 (defun set_clipboard (str / html result) 
   (setq html (vlax-create-object "htmlfile"))
   (setq result (vlax-invoke (vlax-get (vlax-get html 'ParentWindow) 'ClipBoardData) 
-                            'setData "Text" str))
+                            'setData
+                            "Text"
+                            str
+               )
+  )
   (vlax-release-object html)
   (princ "\n[系统] 内容已成功复制到剪切板。")
 )
@@ -624,65 +731,116 @@
 ;; ==========================================================
 ;; 13. ESA 命令 - 全图自动批量导出PDF (彻底修复参数太少报错)
 ;; ==========================================================
-(defun c:ESA (/ ss_all i ent_out ed_out vlist_out p1_out p2_out out_area 
-               ss_inner k obj_in in_ed in_vlist in_min in_max in_area ratio res
-               g_ms ss_local_txt k_txt ed_txt local_txt_list
-              )
-  
-  (vl-load-com)
-  (setq old_cmdecho (getvar "CMDECHO") old_osmode (getvar "OSMODE"))
-  (setvar "CMDECHO" 0) (setvar "OSMODE" 0)
+(defun c:ESA (/ ss_all i ent_out ed_out vlist_out p1_out p2_out out_area ss_inner k 
+              obj_in in_ed in_vlist in_min in_max in_area ratio res g_ms ss_local_txt 
+              k_txt ed_txt local_txt_list
+             ) 
 
-  (setq txt_data '() desktop (strcat (getenv "USERPROFILE") "\\Desktop\\"))
+  (vl-load-com)
+  (setq old_cmdecho (getvar "CMDECHO")
+        old_osmode  (getvar "OSMODE")
+  )
+  (setvar "CMDECHO" 0)
+  (setvar "OSMODE" 0)
   (princ "\n[系统] 正在启动全图自动扫描导出...")
 
   ;; 【关键点 1】：在最外层获取一次 ModelSpace COM 单例，向下安全传递，消灭性能毒瘤
   (setq g_ms (vla-get-modelspace (vla-get-activedocument (vlax-get-acad-object))))
 
-  (setq txt_data (collect_all_text_data))
 
   (if (setq ss_all (ssget "X" '((0 . "LWPOLYLINE") (70 . 1)))) 
     (progn 
       (setq i 0)
       (repeat (sslength ss_all) 
-        (setq ent_out (ssname ss_all i)
-              ed_out (entget ent_out)
-              vlist_out (mapcar 'cdr (vl-remove-if-not '(lambda (x) (= 10 (car x))) ed_out))
-              p1_out (list (apply 'min (mapcar 'car vlist_out)) (apply 'min (mapcar 'cadr vlist_out)))
-              p2_out (list (apply 'max (mapcar 'car vlist_out)) (apply 'max (mapcar 'cadr vlist_out)))
-              out_area (abs (* (- (car p2_out) (car p1_out)) (- (cadr p2_out) (cadr p1_out))))
+        (setq ent_out   (ssname ss_all i)
+              ed_out    (entget ent_out)
+              vlist_out (mapcar 'cdr 
+                                (vl-remove-if-not '(lambda (x) (= 10 (car x))) 
+                                                  ed_out
+                                )
+                        )
+              p1_out    (list (apply 'min (mapcar 'car vlist_out)) 
+                              (apply 'min (mapcar 'cadr vlist_out))
+                        )
+              p2_out    (list (apply 'max (mapcar 'car vlist_out)) 
+                              (apply 'max (mapcar 'cadr vlist_out))
+                        )
+              out_area  (abs 
+                          (* (- (car p2_out) (car p1_out)) 
+                             (- (cadr p2_out) (cadr p1_out))
+                          )
+                        )
         )
 
-        (if (and (> out_area 4500000.0) (< out_area 800000000.0))
-          (if (setq ss_inner (ssget "C" p1_out p2_out '((0 . "LWPOLYLINE") (70 . 1))))
-            (progn
+        (if (and (> out_area 4500000.0) (< out_area 800000000.0)) 
+          (if 
+            (setq ss_inner (ssget "C" 
+                                  p1_out
+                                  p2_out
+                                  '((0 . "LWPOLYLINE") (70 . 1))
+                           )
+            )
+            (progn 
               (setq k 0)
-              (repeat (sslength ss_inner)
-                (setq obj_in (ssname ss_inner k)
-                      in_ed (entget obj_in)
-                      in_vlist (mapcar 'cdr (vl-remove-if-not '(lambda (x) (= 10 (car x))) in_ed))
-                      in_min (list (apply 'min (mapcar 'car in_vlist)) (apply 'min (mapcar 'cadr in_vlist)))
-                      in_max (list (apply 'max (mapcar 'car in_vlist)) (apply 'max (mapcar 'cadr in_vlist)))
-                      in_area (abs (* (- (car in_max) (car in_min)) (- (cadr in_max) (cadr in_min))))
-                      ratio (/ in_area out_area))
+              (repeat (sslength ss_inner) 
+                (setq obj_in   (ssname ss_inner k)
+                      in_ed    (entget obj_in)
+                      in_vlist (mapcar 'cdr 
+                                       (vl-remove-if-not 
+                                         '(lambda (x) (= 10 (car x)))
+                                         in_ed
+                                       )
+                               )
+                      in_min   (list (apply 'min (mapcar 'car in_vlist)) 
+                                     (apply 'min (mapcar 'cadr in_vlist))
+                               )
+                      in_max   (list (apply 'max (mapcar 'car in_vlist)) 
+                                     (apply 'max (mapcar 'cadr in_vlist))
+                               )
+                      in_area  (abs 
+                                 (* (- (car in_max) (car in_min)) 
+                                    (- (cadr in_max) (cadr in_min))
+                                 )
+                               )
+                      ratio    (/ in_area out_area)
+                )
 
-                (if (and (> ratio 0.75) (< ratio 0.98))
-                  (progn
+                (if (and (> ratio 0.75) (< ratio 0.98)) 
+                  (progn 
                     ;; 【关键点 2】：利用 C++ 空间索引，秒级剥离出当前内框里的局部文字
                     (setq local_txt_list '())
-                    (if (setq ss_local_txt (ssget "C" in_min in_max '((0 . "TEXT,MTEXT"))))
-                      (progn
+                    (if 
+                      (setq ss_local_txt (ssget "C" 
+                                                in_min
+                                                in_max
+                                                '((0 . "TEXT,MTEXT"))
+                                         )
+                      )
+                      (progn 
                         (setq k_txt 0)
-                        (repeat (sslength ss_local_txt)
+                        (repeat (sslength ss_local_txt) 
                           (setq ed_txt (entget (ssname ss_local_txt k_txt)))
-                          (setq local_txt_list (cons (list (cdr (assoc 10 ed_txt)) (cdr (assoc 1 ed_txt))) local_txt_list))
+                          (setq local_txt_list (cons 
+                                                 (list (cdr (assoc 10 ed_txt)) 
+                                                       (cdr (assoc 1 ed_txt))
+                                                 )
+                                                 local_txt_list
+                                               )
+                          )
                           (setq k_txt (1+ k_txt))
                         )
                       )
                     )
 
                     ;; 【关键点 3】：以完美的 4 参数形态调用核心处理逻辑，彻底终结报错！
-                    (if (setq res (process_single_box in_min in_max local_txt_list g_ms))
+                    (if 
+                      (setq res (process_single_box 
+                                  in_min
+                                  in_max
+                                  local_txt_list
+                                  g_ms
+                                )
+                      )
                       (export_single_pdf ent_out res p1_out p2_out)
                     )
                   )
@@ -706,23 +864,23 @@
 ;; ==========================================================
 ;; 14. CA 命令 - 提取数据并拼接字符串到剪切板
 ;; ==========================================================
-(defun c:CA (/ final_list res_str item m_code d_num p_code)
+(defun c:CA (/ final_list res_str item m_code d_num p_code) 
   (setvar "CMDECHO" 0)
   (princ "\n[系统] 正在扫描图纸并生成拼接字符串...")
 
-  (setq txt_data (collect_all_text_data))
   (setq final_list (scan_and_extract_boxes))
 
-  (if (and final_list (> (length final_list) 0))
-    (progn
+  (if (and final_list (> (length final_list) 0)) 
+    (progn 
       (setq res_str "")
-      (foreach item (reverse final_list)
-        (setq m_code (nth 0 item)           ; 物料编码
-              d_num  (nth 1 item)           ; 图号
-              p_code (nth 2 item))          ; 产品编码
+      (foreach item (reverse final_list) 
+        (setq m_code (nth 0 item) ; 物料编码
+              d_num  (nth 1 item) ; 图号
+              p_code (nth 2 item)
+        ) ; 产品编码
 
         ;; 将图号中的 / 转换为 -
-        (while (vl-string-search "/" d_num)
+        (while (vl-string-search "/" d_num) 
           (setq d_num (vl-string-subst "-" "/" d_num))
         )
 
@@ -739,27 +897,26 @@
   (princ)
 )
 
-(defun MyQuickDelete (useSelect / ss filter cnt)
+(defun MyQuickDelete (useSelect / ss filter cnt) 
   (vl-load-com)
   (princ "\n正在执行全能清理（包含双点划线、细实线、中心线、审核图层等）...")
-  
+
   ;; 1. 构建组合过滤器
-  (setq filter 
-    '((-4 . "<OR")
-        (0 . "DIMENSION")         ; 标注
-        (0 . "LEADER,MULTILEADER") ; 引线
-        (0 . "*TEXT")             ; 所有文字
-        ;; --- 图层过滤核心区 ---
-        (8 . "细实线,中心线,双点划线") ; 明确的图层名
-        (8 . "*审核*,*设计*,*校对*,*划线*") ; 模糊匹配包含这些字眼的图层
-        ;; --- 线型过滤兜底 ---
-        (6 . "CENTER*,PHANTOM*,DASHDOT*") ; 匹配中心线、双点划线等线型
-      (-4 . "OR>")
-    )
+  (setq filter '((-4 . "<OR")
+                 (0 . "DIMENSION") ; 标注
+                 (0 . "LEADER,MULTILEADER") ; 引线
+                 (0 . "*TEXT") ; 所有文字
+                 ;; --- 图层过滤核心区 ---
+                 (8 . "细实线,中心线,双点划线") ; 明确的图层名
+                 (8 . "*审核*,*设计*,*校对*,*划线*") ; 模糊匹配包含这些字眼的图层
+                 ;; --- 线型过滤兜底 ---
+                 (6 . "CENTER*,PHANTOM*,DASHDOT*") ; 匹配中心线、双点划线等线型
+                 (-4 . "OR>")
+                )
   )
 
   ;; 2. 获取选择集
-  (if useSelect
+  (if useSelect 
     (progn 
       (princ "\n请框选要清理的区域: ")
       (setq ss (ssget filter))
@@ -768,96 +925,61 @@
   )
 
   ;; 3. 执行删除
-  (if ss
-    (progn
+  (if ss 
+    (progn 
       (setq cnt (sslength ss))
       (command "_.erase" ss "")
       (princ (strcat "\n清理成功！共删除 " (itoa cnt) " 个对象。"))
     )
     (princ "\n未发现符合条件的物件。")
   )
-  
+
   (commeand "_.regen")
   (princ)
 )
-;; ==========================================================
-(defun c:CA (/ final_list res_str item m_code d_num p_code)
-  (setvar "CMDECHO" 0)
-  (princ "\n[系统] 正在扫描图纸并生成拼接字符串...")
 
-  (setq txt_data (collect_all_text_data))
-  (setq final_list (scan_and_extract_boxes))
-
-  (if (and final_list (> (length final_list) 0))
-    (progn
-      (setq res_str "")
-      (foreach item (reverse final_list)
-        (setq m_code (nth 0 item)           ; 物料编码
-              d_num  (nth 1 item)           ; 图号
-              p_code (nth 2 item))          ; 产品编码
-
-        ;; 将图号中的 / 转换为 -
-        (while (vl-string-search "/" d_num)
-          (setq d_num (vl-string-subst "-" "/" d_num))
-        )
-
-        ;; 拼接每组数据：物料编码-图号-产品编码
-        (setq res_str (strcat res_str m_code "-" d_num "-" p_code "\n"))
-      )
-
-      ;; 调用剪切板函数
-      (set_clipboard res_str)
-      (princ (strcat "\n[成功] 已提取 " (itoa (length final_list)) " 组数据并复制到剪切板。"))
-    )
-    (princ "\n[错误] 未能识别到符合条件的图纸数据4444。")
-  )
-  (princ)
-)
 (defun c:DeleteAll () (MyQuickDelete nil))    ; 全局一键清理
 (defun c:DeleteSelect () (MyQuickDelete T))   ; 框选清理局部
 ;; ==========================================================
-;; 性能测试命令：c:TestSpeed
+;; 性能测试命令：c:TestSpeed（精准纯净版）
 ;; ==========================================================
-(defun c:TestSpeed (/ start_time end_time elapsed_time ss_test)
+(defun c:TestSpeed (/ start_time end_time elapsed_time ss_count) 
   (vl-load-com)
-  (princ "\n正在准备测试数据...")
-  
-  ;; 先确保 txt_data 全局变量已经被提取和初始化（模拟 c:z1 中的核心提取步骤）
-  (setq txt_data '())
-  (if (setq ss_test (ssget "X" '((0 . "*TEXT"))))
-    (progn
-      (setq i 0)
-      (repeat (sslength ss_test)
-        (setq ent (ssname ss_test i))
-        (setq dxf (entget ent))
-        (setq txt_data (cons (list (cdr (assoc 10 dxf)) (cdr (assoc 1 dxf))) txt_data))
-        (setq i (1+ i))
-      )
-    )
+  (setvar "CMDECHO" 0)
+
+  (princ "\n[系统] 正在分析当前图纸结构...")
+
+  ;; 仅仅用来统计图纸大概有多少文字，给用户一个心理预期，不参与核心计算，不常驻内存
+  (if (setq ss_count (ssget "X" '((0 . "TEXT,MTEXT")))) 
+    (princ (strcat "\n图纸中检测到约 " (itoa (sslength ss_count)) " 个文字对象。"))
+    (princ "\n图纸中未检测到文字对象。")
   )
 
-  (if (null txt_data)
-    (princ "\n[错误] 图纸中没有检测到任何文字对象，无法进行准确测试。")
-    (progn
-      (princ (strcat "\n已加载 " (itoa (length txt_data)) " 条文字数据。开始计时..."))
-      
-      ;; 记录开始时间（毫秒）
-      (setq start_time (getvar "MILLISECS"))
-      
-      ;; 执行你要测试的核心扫描函数
-      (scan_and_extract_boxes)
-      
-      ;; 记录结束时间（毫秒）
-      (setq end_time (getvar "MILLISECS"))
-      
-      ;; 计算总耗时
-      (setq elapsed_time (- end_time start_time))
-      
-      (princ "\n==============================================")
-      (princ (strcat "\n[测试完成] 核心函数总耗时: " (rtos elapsed_time 2 0) " 毫秒 (" (rtos (/ elapsed_time 1000.0) 2 3) " 秒)"))
-      (princ "\n==============================================")
+  (princ "\n[性能测试] 开始全图自动扫描与提取，计时开始...")
+
+  ;; 1. 记录开始时间（毫秒）
+  (setq start_time (getvar "MILLISECS"))
+
+  ;; 2. 执行当前真正核心的扫描函数（内部全靠 C++ 空间索引进行局部裁剪）
+  (scan_and_extract_boxes)
+
+  ;; 3. 记录结束时间（毫秒）
+  (setq end_time (getvar "MILLISECS"))
+
+  ;; 4. 计算总耗时
+  (setq elapsed_time (- end_time start_time))
+
+  (princ "\n==============================================")
+  (princ 
+    (strcat "\n[测试完成] 空间索引优化版核心函数总耗时: " 
+            (rtos elapsed_time 2 0)
+            " 毫秒 ("
+            (rtos (/ elapsed_time 1000.0) 2 3)
+            " 秒)"
     )
   )
+  (princ "\n==============================================")
+  (setvar "CMDECHO" 1)
   (princ)
 )
 ;; ==========================================================
@@ -872,5 +994,6 @@
 (princ "\n--- DelOLE 命令加载成功：批量删除全局ole签名 ---")
 (princ "\n--- DeleteAll 命令加载成功：批量删除全局标注文字 ---")
 (princ "\n--- DeleteSelect 命令加载成功：框选批量删除全局标注文字 ---")
+(princ "\n--- TestSpeed 性能测试命令")
 (princ "\n--- extract_data.lsp 已优化加载完成 ---")
 
